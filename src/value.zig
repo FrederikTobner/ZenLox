@@ -16,9 +16,6 @@ pub const Value = union(Type) {
         return Value{ .Bool = boolean };
     }
 
-    pub fn fromNull() Value {
-        return Value{ .Null = void };
-    }
     pub fn print(self: Value, stdout: anytype) !void {
         switch (self) {
             .Null => {
