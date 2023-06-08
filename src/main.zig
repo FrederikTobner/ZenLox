@@ -14,7 +14,7 @@ pub fn main() !void {
     try chunk.writeOpCode(OpCode.OP_RETURN, 1);
     try chunk.writeOpCode(OpCode.OP_CONSTANT, 1);
     try chunk.writeByte(0, 1);
-    try chunk.addConstant(Value.fromBool(true));
+    try chunk.addConstant(Value.fromNumber(1.2));
     try chunk.disassembleChunk(stdout);
     try buffered_writer.flush();
 }

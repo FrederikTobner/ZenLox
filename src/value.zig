@@ -28,7 +28,7 @@ pub const Value = union(Type) {
                 try stdout.print("{}", .{self.Bool});
             },
             .Number => {
-                try stdout.print("{}", .{self.Number});
+                try stdout.print("{d}", .{self.Number});
             },
             .Obj => {
                 try stdout.print("object", .{});
