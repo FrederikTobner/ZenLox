@@ -7,6 +7,8 @@ pub const OpCode = enum(u8) {
     OP_CONSTANT_LONG,
     OP_NEGATE,
     OP_ADD,
+    // Could be removed if we use OP_NEGATE and OP_ADD instead in order to have a minimal set of opcodes.
+    // But that would make the bytecode bigger. And execution slower as well.
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
@@ -99,9 +101,7 @@ pub const Chunk = struct {
     // Disassembles a single instruction in the chunk
     pub fn disassembleInstruction(self: *Chunk, offset: *u32, stdout: anytype) !void {
         switch (@intToEnum(OpCode, self.byteCode.items[offset.*])) {
-            OpCode.OP_RETURN => {
-                try stdout.print("OP_RETURN\n", .{});
-            },
+            OpCode.OP_RETURN => try stdout.print("OP_RETURN\n", .{}),
             OpCode.OP_CONSTANT => {
                 var constantIndex: u8 = self.byteCode.items[offset.* + 1];
                 try stdout.print("OP_CONSTANT {d} '", .{constantIndex});
@@ -116,21 +116,11 @@ pub const Chunk = struct {
                 try stdout.print("'\n", .{});
                 offset.* += 3;
             },
-            OpCode.OP_NEGATE => {
-                try stdout.print("OP_NEGATE\n", .{});
-            },
-            OpCode.OP_ADD => {
-                try stdout.print("OP_ADD\n", .{});
-            },
-            OpCode.OP_SUBTRACT => {
-                try stdout.print("OP_SUBTRACT\n", .{});
-            },
-            OpCode.OP_MULTIPLY => {
-                try stdout.print("OP_MULTIPLY\n", .{});
-            },
-            OpCode.OP_DIVIDE => {
-                try stdout.print("OP_DIVIDE\n", .{});
-            },
+            OpCode.OP_NEGATE => try stdout.print("OP_NEGATE\n", .{}),
+            OpCode.OP_ADD => try stdout.print("OP_ADD\n", .{}),
+            OpCode.OP_SUBTRACT => try stdout.print("OP_SUBTRACT\n", .{}),
+            OpCode.OP_MULTIPLY => try stdout.print("OP_MULTIPLY\n", .{}),
+            OpCode.OP_DIVIDE => try stdout.print("OP_DIVIDE\n", .{}),
         }
         offset.* += 1;
     }

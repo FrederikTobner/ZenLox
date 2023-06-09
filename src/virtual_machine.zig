@@ -2,11 +2,12 @@ const std = @import("std");
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
+const Compiler = @import("compiler.zig").Compiler;
 
 pub const InterpretResult = enum {
-    RESULT_OK,
-    RESULT_COMPILE_ERROR,
-    RESULT_RUNTIME_ERROR,
+    OK,
+    COMPILE_ERROR,
+    RUNTIME_ERROR,
 };
 const STACK_MAX: u9 = 256;
 const ValueStack = struct {
@@ -53,28 +54,18 @@ pub const VirtualMachine = struct {
     pub fn deinit(self: *VirtualMachine) void {
         _ = self;
     }
-    pub fn interpret(self: *VirtualMachine, chunk: *Chunk, stdout: anytype) !InterpretResult {
-        self.chunk = chunk;
-        return self.run(stdout);
+    pub fn interpret(self: *VirtualMachine, source: []u8, stdout: anytype) !InterpretResult {
+        _ = self;
+        try Compiler.compile(source, stdout);
+        return InterpretResult.OK;
     }
+
     fn binaryOperation(self: *VirtualMachine, op: OpCode) void {
         var b: Value = self.values.pop();
         var a: Value = self.values.pop();
         switch (a) {
-            .Bool => {
-                std.debug.panic("Operands must be two numbers.", .{});
-            },
-            .Null => {
-                std.debug.panic("Operands must be two numbers.", .{});
-            },
             .Number => {
                 switch (b) {
-                    .Bool => {
-                        std.debug.panic("Operands must be two numbers.", .{});
-                    },
-                    .Null => {
-                        std.debug.panic("Operands must be two numbers.", .{});
-                    },
                     .Number => {
                         switch (op) {
                             .OP_ADD => self.values.push(Value.fromNumber(a.Number + b.Number)),
@@ -84,14 +75,10 @@ pub const VirtualMachine = struct {
                             else => unreachable,
                         }
                     },
-                    .Obj => {
-                        std.debug.panic("Operands must be two numbers.", .{});
-                    },
+                    else => std.debug.panic("Operands must be two numbers.", .{}),
                 }
             },
-            .Obj => {
-                std.debug.panic("Operands must be two numbers.", .{});
-            },
+            else => std.debug.panic("Operands must be two numbers.", .{}),
         }
     }
     fn run(self: *VirtualMachine, stdout: anytype) !InterpretResult {
@@ -114,15 +101,16 @@ pub const VirtualMachine = struct {
                     self.values.push(value);
                 },
                 OpCode.OP_CONSTANT_LONG => {
-                    var constantIndex: u24 = @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 1]) << 16 | @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 2]) << 8 | @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 3]);
+                    var constantIndex: u24 = @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 1]) << 16;
+                    constantIndex |= @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 2]) << 8;
+                    constantIndex |= @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 3]);
                     self.instructionIndex += 3;
-                    var value: Value = self.chunk.values.items[constantIndex];
-                    self.values.push(value);
+                    self.values.push(self.chunk.values.items[constantIndex]);
                 },
                 OpCode.OP_RETURN => {
                     try self.values.pop().print(stdout);
                     try stdout.print("\n", .{});
-                    return InterpretResult.RESULT_OK;
+                    return InterpretResult.OK;
                 },
                 OpCode.OP_NEGATE => self.values.push(Value.fromNumber(-self.values.pop().Number)),
                 OpCode.OP_ADD => self.binaryOperation(OpCode.OP_ADD),
@@ -131,6 +119,6 @@ pub const VirtualMachine = struct {
                 OpCode.OP_DIVIDE => self.binaryOperation(OpCode.OP_DIVIDE),
             }
         }
-        return InterpretResult.RESULT_OK;
+        return InterpretResult.OK;
     }
 };
