@@ -1,20 +1,19 @@
 const std = @import("std");
-const Chunk = @import("chunk.zig").Chunk;
+const Chunk = @import("chunk.zig");
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
-const VirtualMachine = @import("virtual_machine.zig").VirtualMachine;
+const VirtualMachine = @import("virtual_machine.zig");
 const InterpretResult = @import("virtual_machine.zig").InterpretResult;
-const Compiler = @import("compiler.zig").Compiler;
+const Compiler = @import("compiler.zig");
 
 pub fn main() !void {
-    var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
-    const stdout = buffered_writer.writer();
+    const writter = std.io.getStdOut().writer();
     var generalPurposeAllocator = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = generalPurposeAllocator.allocator();
     defer _ = generalPurposeAllocator.deinit();
     var chunk = Chunk.init(allocator);
     defer chunk.deinit();
-    var vm = VirtualMachine.init();
+    var vm = VirtualMachine.init(&writter);
     defer vm.deinit();
     vm.traceExecution = true;
     const args = try std.process.argsAlloc(allocator);
@@ -22,9 +21,10 @@ pub fn main() !void {
     if (args.len == 1) {
         try repl(allocator, &vm);
     } else if (args.len == 2) {
-        try runFile(args[1], allocator, &vm, stdout);
+        try runFile(args[1], allocator, &vm);
+    } else {
+        try show_usage(&writter);
     }
-    try buffered_writer.flush();
 }
 
 test "simple test" {
@@ -32,26 +32,25 @@ test "simple test" {
 }
 
 fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
-    _ = vm;
-    var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
-    const stdout = buffered_writer.writer();
     const stdin = std.io.getStdIn();
     while (true) {
-        try stdout.print(">> ", .{});
-        try buffered_writer.flush();
+        try std.io.getStdOut().writer().print(">> ", .{});
         const input = try stdin.reader().readUntilDelimiterAlloc(allocator, '\n', 1024);
         defer allocator.free(input);
-        // No input, exit
+        // No input
         if (input.len == 1) {
             break;
         }
-        try Compiler.compile(input, stdout);
-        try buffered_writer.flush();
+        _ = try vm.interpret(allocator, input);
     }
 }
 
-fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine, stdout: anytype) !void {
+fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     var fileContent = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
-    _ = try vm.interpret(fileContent, stdout);
+    _ = try vm.interpret(allocator, fileContent);
     defer allocator.free(fileContent);
+}
+
+fn show_usage(writter: *const std.fs.File.Writer) !void {
+    try writter.print("Usage: clox [path]\n", .{});
 }

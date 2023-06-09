@@ -1,8 +1,8 @@
 const std = @import("std");
-const Chunk = @import("chunk.zig").Chunk;
+const Chunk = @import("chunk.zig");
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
-const Compiler = @import("compiler.zig").Compiler;
+const Compiler = @import("compiler.zig");
 
 pub const InterpretResult = enum {
     OK,
@@ -39,86 +39,93 @@ const ValueStack = struct {
     }
 };
 
-pub const VirtualMachine = struct {
-    chunk: *Chunk = undefined,
-    instructionIndex: u32 = 0,
-    traceExecution: bool = false,
-    values: ValueStack = undefined,
-    pub fn init() VirtualMachine {
-        var valueStack = ValueStack{};
-        valueStack.resetStack();
-        return VirtualMachine{
-            .values = valueStack,
-        };
+const VirtualMachine = @This();
+chunk: *Chunk = undefined,
+instructionIndex: u32 = 0,
+traceExecution: bool = false,
+values: ValueStack = undefined,
+writer: *const std.fs.File.Writer,
+pub fn init(writer: *const std.fs.File.Writer) VirtualMachine {
+    var valueStack = ValueStack{};
+    valueStack.resetStack();
+    return VirtualMachine{
+        .values = valueStack,
+        .writer = writer,
+    };
+}
+pub fn deinit(self: *VirtualMachine) void {
+    _ = self;
+}
+pub fn interpret(self: *VirtualMachine, allocator: std.mem.Allocator, source: []u8) !InterpretResult {
+    var chunk = Chunk.init(allocator);
+    var compiler = Compiler.init();
+    if (try compiler.compile(source, &chunk)) {
+        return InterpretResult.COMPILE_ERROR;
+    } else {
+        self.chunk = &chunk;
+        self.instructionIndex = 0;
+        return try self.run();
     }
-    pub fn deinit(self: *VirtualMachine) void {
-        _ = self;
-    }
-    pub fn interpret(self: *VirtualMachine, source: []u8, stdout: anytype) !InterpretResult {
-        _ = self;
-        try Compiler.compile(source, stdout);
-        return InterpretResult.OK;
-    }
+}
 
-    fn binaryOperation(self: *VirtualMachine, op: OpCode) void {
-        var b: Value = self.values.pop();
-        var a: Value = self.values.pop();
-        switch (a) {
-            .Number => {
-                switch (b) {
-                    .Number => {
-                        switch (op) {
-                            .OP_ADD => self.values.push(Value.fromNumber(a.Number + b.Number)),
-                            .OP_SUBTRACT => self.values.push(Value.fromNumber(a.Number - b.Number)),
-                            .OP_MULTIPLY => self.values.push(Value.fromNumber(a.Number * b.Number)),
-                            .OP_DIVIDE => self.values.push(Value.fromNumber(a.Number / b.Number)),
-                            else => unreachable,
-                        }
-                    },
-                    else => std.debug.panic("Operands must be two numbers.", .{}),
-                }
+fn binaryOperation(self: *VirtualMachine, op: OpCode) void {
+    var b: Value = self.values.pop();
+    var a: Value = self.values.pop();
+    switch (a) {
+        .Number => {
+            switch (b) {
+                .Number => {
+                    switch (op) {
+                        .OP_ADD => self.values.push(Value{ .Number = a.Number + b.Number }),
+                        .OP_SUBTRACT => self.values.push(Value{ .Number = a.Number - b.Number }),
+                        .OP_MULTIPLY => self.values.push(Value{ .Number = a.Number * b.Number }),
+                        .OP_DIVIDE => self.values.push(Value{ .Number = a.Number / b.Number }),
+                        else => unreachable,
+                    }
+                },
+                else => std.debug.panic("Operands must be two numbers.", .{}),
+            }
+        },
+        else => std.debug.panic("Operands must be two numbers.", .{}),
+    }
+}
+fn run(self: *VirtualMachine) !InterpretResult {
+    while (self.instructionIndex < self.chunk.byte_code.items.len) : (self.instructionIndex += 1) {
+        if (self.traceExecution) {
+            var indexCopy = self.instructionIndex;
+            self.chunk.disassembleInstruction(&indexCopy);
+            try self.writer.print("stack: ", .{});
+            for (self.values.stack) |value| {
+                try self.writer.print("[", .{});
+                try value.print(self.writer);
+                try self.writer.print("]", .{});
+            }
+            try std.io.getStdOut().writer().print("\n", .{});
+        }
+        switch (@intToEnum(OpCode, self.chunk.byte_code.items[self.instructionIndex])) {
+            OpCode.OP_CONSTANT => {
+                self.instructionIndex += 1;
+                var value: Value = self.chunk.values.items[self.chunk.byte_code.items[self.instructionIndex]];
+                self.values.push(value);
             },
-            else => std.debug.panic("Operands must be two numbers.", .{}),
+            OpCode.OP_CONSTANT_LONG => {
+                var constantIndex: u24 = @intCast(u24, self.chunk.byte_code.items[self.instructionIndex + 1]) << 16;
+                constantIndex |= @intCast(u24, self.chunk.byte_code.items[self.instructionIndex + 2]) << 8;
+                constantIndex |= @intCast(u24, self.chunk.byte_code.items[self.instructionIndex + 3]);
+                self.instructionIndex += 3;
+                self.values.push(self.chunk.values.items[constantIndex]);
+            },
+            OpCode.OP_RETURN => {
+                try self.values.pop().print(self.writer);
+                try self.writer.print("\n", .{});
+                return InterpretResult.OK;
+            },
+            OpCode.OP_NEGATE => self.values.push(Value{ .Number = -self.values.pop().Number }),
+            OpCode.OP_ADD => self.binaryOperation(OpCode.OP_ADD),
+            OpCode.OP_SUBTRACT => self.binaryOperation(OpCode.OP_SUBTRACT),
+            OpCode.OP_MULTIPLY => self.binaryOperation(OpCode.OP_MULTIPLY),
+            OpCode.OP_DIVIDE => self.binaryOperation(OpCode.OP_DIVIDE),
         }
     }
-    fn run(self: *VirtualMachine, stdout: anytype) !InterpretResult {
-        while (self.instructionIndex < self.chunk.byteCode.items.len) : (self.instructionIndex += 1) {
-            if (self.traceExecution) {
-                var indexCopy = self.instructionIndex;
-                try self.chunk.disassembleInstruction(&indexCopy, stdout);
-                try stdout.print("stack: ", .{});
-                for (self.values.stack) |value| {
-                    try stdout.print("[", .{});
-                    try value.print(stdout);
-                    try stdout.print("]", .{});
-                }
-                try stdout.print("\n", .{});
-            }
-            switch (@intToEnum(OpCode, self.chunk.byteCode.items[self.instructionIndex])) {
-                OpCode.OP_CONSTANT => {
-                    self.instructionIndex += 1;
-                    var value: Value = self.chunk.values.items[self.chunk.byteCode.items[self.instructionIndex]];
-                    self.values.push(value);
-                },
-                OpCode.OP_CONSTANT_LONG => {
-                    var constantIndex: u24 = @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 1]) << 16;
-                    constantIndex |= @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 2]) << 8;
-                    constantIndex |= @intCast(u24, self.chunk.byteCode.items[self.instructionIndex + 3]);
-                    self.instructionIndex += 3;
-                    self.values.push(self.chunk.values.items[constantIndex]);
-                },
-                OpCode.OP_RETURN => {
-                    try self.values.pop().print(stdout);
-                    try stdout.print("\n", .{});
-                    return InterpretResult.OK;
-                },
-                OpCode.OP_NEGATE => self.values.push(Value.fromNumber(-self.values.pop().Number)),
-                OpCode.OP_ADD => self.binaryOperation(OpCode.OP_ADD),
-                OpCode.OP_SUBTRACT => self.binaryOperation(OpCode.OP_SUBTRACT),
-                OpCode.OP_MULTIPLY => self.binaryOperation(OpCode.OP_MULTIPLY),
-                OpCode.OP_DIVIDE => self.binaryOperation(OpCode.OP_DIVIDE),
-            }
-        }
-        return InterpretResult.OK;
-    }
-};
+    return InterpretResult.OK;
+}

@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const TokenType = enum {
     AND,
     BANG,
@@ -41,17 +43,26 @@ pub const TokenType = enum {
     WHILE,
 };
 
-pub const Token = struct {
-    tokenType: TokenType,
-    start: [*]const u8,
-    line: u32,
-    length: usize,
-    pub fn init(tokenType: TokenType, start: [*]const u8, line: u32, length: usize) Token {
-        return Token{
-            .tokenType = tokenType,
-            .start = start,
-            .line = line,
-            .length = length,
-        };
-    }
-};
+const Token = @This();
+tokenType: TokenType,
+start: [*]const u8,
+line: u32,
+length: usize,
+pub fn init(tokenType: TokenType, start: [*]const u8, line: u32, length: usize) Token {
+    return Token{
+        .tokenType = tokenType,
+        .start = start,
+        .line = line,
+        .length = length,
+    };
+}
+
+pub fn asLexeme(self: *Token) []const u8 {
+    return self.start[0 .. self.length - 1];
+}
+
+test "Token asLexeme" {
+    var source: []const u8 = "123456";
+    var token = Token.init(TokenType.NUMBER, @ptrCast([*]const u8, source), 1, 3);
+    try std.testing.expectEqualSlices(u8, source[0..2], token.asLexeme());
+}

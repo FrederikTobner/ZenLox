@@ -21,11 +21,10 @@ pub fn build(b: *std.build.Builder) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const exe_tests = b.addTest("src/tests.zig");
+    const exe_tests = b.addTest("tests.zig");
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
 
