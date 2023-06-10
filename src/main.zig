@@ -1,21 +1,14 @@
 const std = @import("std");
-const Chunk = @import("chunk.zig");
-const OpCode = @import("chunk.zig").OpCode;
-const Value = @import("value.zig").Value;
 const VirtualMachine = @import("virtual_machine.zig");
 const InterpretResult = @import("virtual_machine.zig").InterpretResult;
-const Compiler = @import("compiler.zig");
 
 pub fn main() !void {
     const writter = std.io.getStdOut().writer();
-    var generalPurposeAllocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = generalPurposeAllocator.allocator();
-    defer _ = generalPurposeAllocator.deinit();
-    var chunk = Chunk.init(allocator);
-    defer chunk.deinit();
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = general_purpose_allocator.allocator();
+    defer _ = general_purpose_allocator.deinit();
     var vm = VirtualMachine.init(&writter);
     defer vm.deinit();
-    vm.traceExecution = true;
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
     if (args.len == 1) {
@@ -25,10 +18,6 @@ pub fn main() !void {
     } else {
         try show_usage(&writter);
     }
-}
-
-test "simple test" {
-    try std.testing.expectEqual(1, 1);
 }
 
 fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
@@ -41,13 +30,17 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
         if (input.len == 1) {
             break;
         }
-        _ = try vm.interpret(allocator, input);
+        if (try vm.interpret(allocator, input) == InterpretResult.COMPILE_ERROR) {
+            std.debug.print("Compile error\n", .{});
+        }
     }
 }
 
 fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     var fileContent = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
-    _ = try vm.interpret(allocator, fileContent);
+    if (try vm.interpret(allocator, fileContent) == InterpretResult.COMPILE_ERROR) {
+        std.debug.print("Compile error\n", .{});
+    }
     defer allocator.free(fileContent);
 }
 

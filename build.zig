@@ -9,13 +9,26 @@ pub fn build(b: *std.build.Builder) void {
 
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
+    // The default is Debug.
     const mode = b.standardReleaseOptions();
 
+    // Debug options making it easier to debug the VM
+    const debug_options = b.addOptions();
+    // Option to enable tracing of the VM
+    const trace_execution = b.option(bool, "traceExecution", "Trace execution of the VM");
+    debug_options.addOption(bool, "traceExecution", trace_execution orelse false);
+    // Option to print the bytecode of the compiled code
+    const print_bytecode = b.option(bool, "printBytecode", "Printing the bytcode of the compiled code");
+    debug_options.addOption(bool, "printBytecode", print_bytecode orelse false);
+
     const exe = b.addExecutable("ZenLox", "src/main.zig");
+    // Adding debug options to the executable
+    exe.addOptions("debug_options", debug_options);
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
 
+    // Adding a custom step to run the executable
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
@@ -24,10 +37,10 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    // Adding a custom step to run the tests
     const exe_tests = b.addTest("test.zig");
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
-
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);
 }

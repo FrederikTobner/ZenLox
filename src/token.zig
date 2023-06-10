@@ -44,13 +44,13 @@ pub const TokenType = enum {
 };
 
 const Token = @This();
-tokenType: TokenType,
+token_type: TokenType,
 start: [*]const u8,
 line: u32,
 length: usize,
-pub fn init(tokenType: TokenType, start: [*]const u8, line: u32, length: usize) Token {
+pub fn init(token_type: TokenType, start: [*]const u8, line: u32, length: usize) Token {
     return Token{
-        .tokenType = tokenType,
+        .token_type = token_type,
         .start = start,
         .line = line,
         .length = length,
@@ -58,11 +58,11 @@ pub fn init(tokenType: TokenType, start: [*]const u8, line: u32, length: usize) 
 }
 
 pub fn asLexeme(self: *Token) []const u8 {
-    return self.start[0 .. self.length - 1];
+    return self.start[0..self.length];
 }
 
 test "Token asLexeme" {
     var source: []const u8 = "123456";
     var token = Token.init(TokenType.NUMBER, @ptrCast([*]const u8, source), 1, 3);
-    try std.testing.expectEqualSlices(u8, source[0..2], token.asLexeme());
+    try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
 }

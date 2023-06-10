@@ -2,16 +2,16 @@ const std = @import("std");
 const Value = @import("value.zig").Value;
 
 pub const OpCode = enum(u8) {
-    OP_RETURN,
-    OP_CONSTANT,
-    OP_CONSTANT_LONG,
-    OP_NEGATE,
-    OP_ADD,
+    RETURN,
+    CONSTANT,
+    CONSTANT_LONG,
+    NEGATE,
+    ADD,
     // Could be removed if we use OP_NEGATE and OP_ADD instead in order to have a minimal set of opcodes.
-    // But that would make the bytecode bigger. And execution slower as well.
-    OP_SUBTRACT,
-    OP_MULTIPLY,
-    OP_DIVIDE,
+    // But that would lead to more bytecode for subtracting and execution would be slower as well.
+    SUBTRACT,
+    MULTIPLY,
+    DIVIDE,
 };
 
 const Chunk = @This();
@@ -49,8 +49,9 @@ pub fn writeShortWord(self: *Chunk, sword: u24, line: u32) !void {
 }
 
 // Adds a constant to the chunk
-pub fn addConstant(self: *Chunk, value: Value) !void {
+pub fn addConstant(self: *Chunk, value: Value) !usize {
     try self.values.append(value);
+    return self.values.items.len - 1;
 }
 
 // Deinitializes the chunk
@@ -61,10 +62,10 @@ pub fn deinit(self: *Chunk) void {
 }
 
 // Disassembles all the instructions in the chunk
-pub fn disassembleChunk(self: *Chunk) void {
+pub fn disassemble(self: *Chunk) void {
     var offset: u32 = 0;
     std.debug.print("Chunk size {}\n", .{self.byte_code.items.len});
-    while (offset < self.byteCode.items.len) {
+    while (offset < self.byte_code.items.len) {
         std.debug.print("{X:04} ", .{offset});
         self.disassembleInstruction(&offset);
     }
@@ -73,15 +74,15 @@ pub fn disassembleChunk(self: *Chunk) void {
 // Disassembles a single instruction in the chunk
 pub fn disassembleInstruction(self: *Chunk, offset: *u32) void {
     switch (@intToEnum(OpCode, self.byte_code.items[offset.*])) {
-        OpCode.OP_RETURN => std.debug.print("OP_RETURN\n", .{}),
-        OpCode.OP_CONSTANT => {
+        OpCode.RETURN => std.debug.print("OP_RETURN\n", .{}),
+        OpCode.CONSTANT => {
             var constantIndex: u8 = self.byte_code.items[offset.* + 1];
             std.debug.print("OP_CONSTANT {d} '", .{constantIndex});
             self.values.items[constantIndex].printDebug();
             std.debug.print("'\n", .{});
             offset.* += 1;
         },
-        OpCode.OP_CONSTANT_LONG => {
+        OpCode.CONSTANT_LONG => {
             var constantIndex: u24 = @intCast(u24, self.byte_code.items[offset.* + 1]) << 16;
             constantIndex |= @intCast(u24, self.byte_code.items[offset.* + 2]) << 8;
             constantIndex |= @intCast(u24, self.byte_code.items[offset.* + 3]);
@@ -90,11 +91,11 @@ pub fn disassembleInstruction(self: *Chunk, offset: *u32) void {
             std.debug.print("'\n", .{});
             offset.* += 3;
         },
-        OpCode.OP_NEGATE => std.debug.print("OP_NEGATE\n", .{}),
-        OpCode.OP_ADD => std.debug.print("OP_ADD\n", .{}),
-        OpCode.OP_SUBTRACT => std.debug.print("OP_SUBTRACT\n", .{}),
-        OpCode.OP_MULTIPLY => std.debug.print("OP_MULTIPLY\n", .{}),
-        OpCode.OP_DIVIDE => std.debug.print("OP_DIVIDE\n", .{}),
+        OpCode.NEGATE => std.debug.print("OP_NEGATE\n", .{}),
+        OpCode.ADD => std.debug.print("OP_ADD\n", .{}),
+        OpCode.SUBTRACT => std.debug.print("OP_SUBTRACT\n", .{}),
+        OpCode.MULTIPLY => std.debug.print("OP_MULTIPLY\n", .{}),
+        OpCode.DIVIDE => std.debug.print("OP_DIVIDE\n", .{}),
     }
     offset.* += 1;
 }

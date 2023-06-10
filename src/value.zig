@@ -2,32 +2,39 @@ const std = @import("std");
 
 const Object = @import("object.zig").Object;
 
-pub const Type = enum { Null, Bool, Number, Obj };
+pub const Type = enum { NULL, BOOL, NUMBER, OBJECT };
 
 // Tagged union that can hold any of the supported types.
 pub const Value = union(Type) {
-    Null: void,
-    Bool: bool,
-    Number: f64,
-    Obj: *Object,
+    NULL: void,
+    BOOL: bool,
+    NUMBER: f64,
+    OBJECT: *Object,
+
+    pub fn isNumber(self: Value) bool {
+        switch (self) {
+            .NUMBER => true,
+            else => false,
+        }
+    }
 
     // Prints the value using the given writer
     pub fn print(self: Value, writer: *const std.fs.File.Writer) !void {
         switch (self) {
-            .Null => try writer.print("null", .{}),
-            .Bool => try writer.print("{}", .{self.Bool}),
-            .Number => try writer.print("{d}", .{self.Number}),
-            .Obj => try writer.print("object", .{}),
+            .NULL => try writer.print("null", .{}),
+            .BOOL => try writer.print("{}", .{self.BOOL}),
+            .NUMBER => try writer.print("{d}", .{self.NUMBER}),
+            .OBJECT => try writer.print("object", .{}),
         }
     }
 
     // Prints the value to stderr- used only for debugging purposes
     pub fn printDebug(self: Value) void {
         switch (self) {
-            .Null => std.debug.print("null", .{}),
-            .Bool => std.debug.print("{}", .{self.Bool}),
-            .Number => std.debug.print("{d}", .{self.Number}),
-            .Obj => std.debug.print("object", .{}),
+            .NULL => std.debug.print("null", .{}),
+            .BOOL => std.debug.print("{}", .{self.BOOL}),
+            .NUMBER => std.debug.print("{d}", .{self.NUMBER}),
+            .OBJECT => std.debug.print("object", .{}),
         }
     }
 };

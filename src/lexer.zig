@@ -53,7 +53,7 @@ pub fn scanToken(self: *Lexer) Token {
         },
         '"' => return self.string(),
         else => return Token{
-            .tokenType = .ERROR,
+            .token_type = .ERROR,
             .line = self.line,
             .start = self.current,
             .length = 0,
@@ -94,9 +94,9 @@ fn advance(self: *Lexer) u8 {
     return self.current[0];
 }
 
-fn makeToken(self: *Lexer, tokenType: TokenType) Token {
+fn makeToken(self: *Lexer, token_type: TokenType) Token {
     return Token{
-        .tokenType = tokenType,
+        .token_type = token_type,
         .line = self.line,
         .length = @ptrToInt(self.current) - @ptrToInt(self.start),
         .start = self.start,
@@ -105,7 +105,7 @@ fn makeToken(self: *Lexer, tokenType: TokenType) Token {
 
 fn makeErrorToken(self: *Lexer, message: []const u8) Token {
     return Token{
-        .tokenType = .ERROR,
+        .token_type = .ERROR,
         .line = self.line,
         .length = message.len,
         .start = message.ptr,
@@ -211,39 +211,47 @@ test "Scan Token" {
     var source: []const u8 = "()!=\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.LEFT_PARENTHESIZE, token.tokenType);
-    try std.testing.expectEqualSlices(u8, source[0..0], token.asLexeme());
+    try std.testing.expectEqual(TokenType.LEFT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[0..1], token.asLexeme());
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.RIGHT_PARENTHESIZE, token.tokenType);
-    try std.testing.expectEqualSlices(u8, source[1..1], token.asLexeme());
+    try std.testing.expectEqual(TokenType.RIGHT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[1..2], token.asLexeme());
     token = lexer.scanToken();
-    std.debug.print("token: {}\n", .{token.tokenType});
-    try std.testing.expectEqual(TokenType.BANG_EQUAL, token.tokenType);
-    try std.testing.expectEqualSlices(u8, source[2..3], token.asLexeme());
+    std.debug.print("token: {}\n", .{token.token_type});
+    try std.testing.expectEqual(TokenType.BANG_EQUAL, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[2..4], token.asLexeme());
 }
 
 test "Can handle whitespaces" {
     var source: []const u8 = " ( ) \x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.LEFT_PARENTHESIZE, token.tokenType);
-    try std.testing.expectEqualSlices(u8, source[1..1], token.asLexeme());
+    try std.testing.expectEqual(TokenType.LEFT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[1..2], token.asLexeme());
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.RIGHT_PARENTHESIZE, token.tokenType);
-    try std.testing.expectEqualSlices(u8, source[3..3], token.asLexeme());
+    try std.testing.expectEqual(TokenType.RIGHT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[3..4], token.asLexeme());
 }
 
 test "Can handle comments" {
     var source: []const u8 = " // this is a comment\n\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.EOF, token.tokenType);
+    try std.testing.expectEqual(TokenType.EOF, token.token_type);
 }
 
 test "Can handle strings" {
     var source: []const u8 = "\"zen\"\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.STRING, token.tokenType);
-    try std.testing.expectEqualSlices(u8, source[0..4], token.asLexeme());
+    try std.testing.expectEqual(TokenType.STRING, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[0..5], token.asLexeme());
+}
+
+test "Can scan Numbers" {
+    var source: []const u8 = "123\x00";
+    var lexer = Lexer.init(source);
+    var token = lexer.scanToken();
+    try std.testing.expectEqual(TokenType.NUMBER, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
 }
