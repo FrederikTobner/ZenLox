@@ -19,7 +19,7 @@ const ValueStack = struct {
         self.stack_top_index = 0;
         var start_index: usize = 0;
         while (start_index < STACK_MAX) : (start_index += 1) {
-            self.stack[start_index] = Value{ .NULL = undefined };
+            self.stack[start_index] = Value{ .VAL_NULL = undefined };
         }
     }
     // Pushes a value onto the stack.
@@ -72,22 +72,20 @@ pub fn interpret(self: *VirtualMachine, allocator: std.mem.Allocator, source: []
 fn binaryOperation(self: *VirtualMachine, op: OpCode) void {
     var b: Value = self.values.pop();
     var a: Value = self.values.pop();
-    switch (a) {
-        .NUMBER => {
-            switch (b) {
-                .NUMBER => {
-                    switch (op) {
-                        .ADD => self.values.push(Value{ .NUMBER = a.NUMBER + b.NUMBER }),
-                        .SUBTRACT => self.values.push(Value{ .NUMBER = a.NUMBER - b.NUMBER }),
-                        .MULTIPLY => self.values.push(Value{ .NUMBER = a.NUMBER * b.NUMBER }),
-                        .DIVIDE => self.values.push(Value{ .NUMBER = a.NUMBER / b.NUMBER }),
-                        else => unreachable,
-                    }
-                },
-                else => std.debug.panic("Operands must be two numbers.", .{}),
-            }
-        },
-        else => std.debug.panic("Operands must be two numbers.", .{}),
+    if (a.isNumber() and b.isNumber()) {
+        switch (op) {
+            .OP_ADD => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER + b.VAL_NUMBER }),
+            .OP_SUBTRACT => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER - b.VAL_NUMBER }),
+            .OP_MULTIPLY => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER * b.VAL_NUMBER }),
+            .OP_DIVIDE => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER / b.VAL_NUMBER }),
+            .OP_GREATER => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER > b.VAL_NUMBER }),
+            .OP_LESS => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER < b.VAL_NUMBER }),
+            .OP_GREATER_EQUAL => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER >= b.VAL_NUMBER }),
+            .OP_LESS_EQUAL => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER <= b.VAL_NUMBER }),
+            else => unreachable,
+        }
+    } else {
+        std.debug.panic("Operands must be two numbers.", .{});
     }
 }
 fn run(self: *VirtualMachine) !InterpretResult {
@@ -104,27 +102,45 @@ fn run(self: *VirtualMachine) !InterpretResult {
             try std.io.getStdOut().writer().print("\n", .{});
         }
         switch (@intToEnum(OpCode, self.chunk.byte_code.items[self.instruction_index])) {
-            .CONSTANT => {
+            .OP_CONSTANT => {
                 self.instruction_index += 1;
                 self.values.push(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]]);
             },
-            .CONSTANT_LONG => {
+            .OP_CONSTANT_LONG => {
                 var constant_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
                 constant_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
                 constant_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
                 self.instruction_index += 3;
                 self.values.push(self.chunk.values.items[constant_index]);
             },
-            .RETURN => {
+            .OP_RETURN => {
                 try self.values.pop().print(self.writer);
                 try self.writer.print("\n", .{});
                 return InterpretResult.OK;
             },
-            .NEGATE => self.values.push(Value{ .NUMBER = -self.values.pop().NUMBER }),
-            .ADD => self.binaryOperation(OpCode.ADD),
-            .SUBTRACT => self.binaryOperation(OpCode.SUBTRACT),
-            .MULTIPLY => self.binaryOperation(OpCode.MULTIPLY),
-            .DIVIDE => self.binaryOperation(OpCode.DIVIDE),
+            .OP_NEGATE => self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
+            .OP_ADD => self.binaryOperation(.OP_ADD),
+            .OP_SUBTRACT => self.binaryOperation(.OP_SUBTRACT),
+            .OP_MULTIPLY => self.binaryOperation(.OP_MULTIPLY),
+            .OP_DIVIDE => self.binaryOperation(.OP_DIVIDE),
+            .OP_NULL => self.values.push(Value{ .VAL_NULL = undefined }),
+            .OP_TRUE => self.values.push(Value{ .VAL_BOOL = true }),
+            .OP_FALSE => self.values.push(Value{ .VAL_BOOL = false }),
+            .OP_NOT => self.values.push(Value{ .VAL_BOOL = self.values.pop().isFalsey() }),
+            .OP_EQUAL => {
+                var b: Value = self.values.pop();
+                var a: Value = self.values.pop();
+                self.values.push(Value{ .VAL_BOOL = a.isEqual(b) });
+            },
+            .OP_GREATER => self.binaryOperation(.OP_GREATER),
+            .OP_LESS => self.binaryOperation(.OP_LESS),
+            .OP_NOT_EQUAL => {
+                var b: Value = self.values.pop();
+                var a: Value = self.values.pop();
+                self.values.push(Value{ .VAL_BOOL = !a.isEqual(b) });
+            },
+            .OP_GREATER_EQUAL => self.binaryOperation(.OP_GREATER_EQUAL),
+            .OP_LESS_EQUAL => self.binaryOperation(.OP_LESS_EQUAL),
         }
     }
     return InterpretResult.OK;

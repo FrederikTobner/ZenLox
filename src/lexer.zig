@@ -18,7 +18,7 @@ pub fn scanToken(self: *Lexer) Token {
     self.skipWhitespace();
     self.start = self.current;
     if (self.isAtEnd()) {
-        return self.makeToken(TokenType.EOF);
+        return self.makeToken(TokenType.TOKEN_EOF);
     }
     const character = self.advance();
     if (isDigit(character)) {
@@ -28,20 +28,20 @@ pub fn scanToken(self: *Lexer) Token {
         return self.identifier();
     }
     switch (character) {
-        '(' => return self.makeToken(TokenType.LEFT_PARENTHESIZE),
-        ')' => return self.makeToken(TokenType.RIGHT_PARENTHESIZE),
-        '{' => return self.makeToken(TokenType.LEFT_BRACE),
-        '}' => return self.makeToken(TokenType.RIGHT_BRACE),
-        ',' => return self.makeToken(TokenType.COMMA),
-        '.' => return self.makeToken(TokenType.DOT),
-        '-' => return self.makeToken(TokenType.MINUS),
-        '+' => return self.makeToken(TokenType.PLUS),
-        ';' => return self.makeToken(TokenType.SEMICOLON),
-        '*' => return self.makeToken(TokenType.STAR),
-        '!' => return self.makeToken(if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG),
-        '=' => return self.makeToken(if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL),
-        '<' => return self.makeToken(if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
-        '>' => return self.makeToken(if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER),
+        '(' => return self.makeToken(TokenType.TOKEN_LEFT_PARENTHESIZE),
+        ')' => return self.makeToken(TokenType.TOKEN_RIGHT_PARENTHESIZE),
+        '{' => return self.makeToken(TokenType.TOKEN_LEFT_BRACE),
+        '}' => return self.makeToken(TokenType.TOKEN_RIGHT_BRACE),
+        ',' => return self.makeToken(TokenType.TOKEN_COMMA),
+        '.' => return self.makeToken(TokenType.TOKEN_DOT),
+        '-' => return self.makeToken(TokenType.TOKEN_MINUS),
+        '+' => return self.makeToken(TokenType.TOKEN_PLUS),
+        ';' => return self.makeToken(TokenType.TOKEN_SEMICOLON),
+        '*' => return self.makeToken(TokenType.TOKEN_STAR),
+        '!' => return self.makeToken(if (self.match('=')) TokenType.TOKEN_BANG_EQUAL else TokenType.TOKEN_BANG),
+        '=' => return self.makeToken(if (self.match('=')) TokenType.TOKEN_EQUAL_EQUAL else TokenType.TOKEN_EQUAL),
+        '<' => return self.makeToken(if (self.match('=')) TokenType.TOKEN_LESS_EQUAL else TokenType.TOKEN_LESS),
+        '>' => return self.makeToken(if (self.match('=')) TokenType.TOKEN_GREATER_EQUAL else TokenType.TOKEN_GREATER),
         '/' => {
             if (self.match('/')) {
                 while (self.peek() != '\n' and !self.isAtEnd()) {
@@ -49,11 +49,11 @@ pub fn scanToken(self: *Lexer) Token {
                 }
                 return self.scanToken();
             }
-            return self.makeToken(TokenType.SLASH);
+            return self.makeToken(TokenType.TOKEN_SLASH);
         },
         '"' => return self.string(),
         else => return Token{
-            .token_type = .ERROR,
+            .token_type = .TOKEN_ERROR,
             .line = self.line,
             .start = self.current,
             .length = 0,
@@ -105,7 +105,7 @@ fn makeToken(self: *Lexer, token_type: TokenType) Token {
 
 fn makeErrorToken(self: *Lexer, message: []const u8) Token {
     return Token{
-        .token_type = .ERROR,
+        .token_type = .TOKEN_ERROR,
         .line = self.line,
         .length = message.len,
         .start = message.ptr,
@@ -138,7 +138,7 @@ fn string(self: *Lexer) Token {
     }
     // Skipping the closing ".
     _ = self.advance();
-    return self.makeToken(TokenType.STRING);
+    return self.makeToken(TokenType.TOKEN_STRING);
 }
 
 fn number(self: *Lexer) Token {
@@ -151,44 +151,44 @@ fn number(self: *Lexer) Token {
             _ = self.advance();
         }
     }
-    return self.makeToken(TokenType.NUMBER);
+    return self.makeToken(TokenType.TOKEN_NUMBER);
 }
 
 fn identifierType(self: *Lexer) TokenType {
     switch (self.start[0]) {
-        'a' => return self.checkKeyword(1, "nd", TokenType.AND),
-        'c' => return self.checkKeyword(1, "lass", TokenType.CLASS),
-        'e' => return self.checkKeyword(1, "lse", TokenType.ELSE),
+        'a' => return self.checkKeyword(1, "nd", TokenType.TOKEN_AND),
+        'c' => return self.checkKeyword(1, "lass", TokenType.TOKEN_CLASS),
+        'e' => return self.checkKeyword(1, "lse", TokenType.TOKEN_ELSE),
         'f' => {
             if (self.distance() > 1) {
                 switch (self.start[1]) {
-                    'a' => return self.checkKeyword(2, "lse", TokenType.FALSE),
-                    'o' => return self.checkKeyword(2, "r", TokenType.FOR),
-                    'u' => return self.checkKeyword(2, "n", TokenType.FUN),
+                    'a' => return self.checkKeyword(2, "lse", TokenType.TOKEN_FALSE),
+                    'o' => return self.checkKeyword(2, "r", TokenType.TOKEN_FOR),
+                    'u' => return self.checkKeyword(2, "n", TokenType.TOKEN_FUN),
                     else => {},
                 }
             }
         },
-        'i' => return self.checkKeyword(1, "f", TokenType.IF),
-        'n' => return self.checkKeyword(1, "ull", TokenType.NULL),
-        'o' => return self.checkKeyword(1, "r", TokenType.OR),
-        'p' => return self.checkKeyword(1, "rint", TokenType.PRINT),
-        'r' => return self.checkKeyword(1, "eturn", TokenType.RETURN),
-        's' => return self.checkKeyword(1, "uper", TokenType.SUPER),
+        'i' => return self.checkKeyword(1, "f", TokenType.TOKEN_IF),
+        'n' => return self.checkKeyword(1, "ull", TokenType.TOKEN_NULL),
+        'o' => return self.checkKeyword(1, "r", TokenType.TOKEN_OR),
+        'p' => return self.checkKeyword(1, "rint", TokenType.TOKEN_PRINT),
+        'r' => return self.checkKeyword(1, "eturn", TokenType.TOKEN_RETURN),
+        's' => return self.checkKeyword(1, "uper", TokenType.TOKEN_SUPER),
         't' => {
             if (self.distance() > 1) {
                 switch (self.start[1]) {
-                    'h' => return self.checkKeyword(2, "is", TokenType.THIS),
-                    'r' => return self.checkKeyword(2, "ue", TokenType.TRUE),
+                    'h' => return self.checkKeyword(2, "is", TokenType.TOKEN_THIS),
+                    'r' => return self.checkKeyword(2, "ue", TokenType.TOKEN_TRUE),
                     else => {},
                 }
             }
         },
-        'v' => return self.checkKeyword(1, "ar", TokenType.VAR),
-        'w' => return self.checkKeyword(1, "hile", TokenType.WHILE),
+        'v' => return self.checkKeyword(1, "ar", TokenType.TOKEN_VAR),
+        'w' => return self.checkKeyword(1, "hile", TokenType.TOKEN_WHILE),
         else => {},
     }
-    return TokenType.IDENTIFIER;
+    return TokenType.TOKEN_IDENTIFIER;
 }
 
 fn identifier(self: *Lexer) Token {
@@ -200,7 +200,7 @@ fn identifier(self: *Lexer) Token {
 
 inline fn checkKeyword(self: *Lexer, startIndex: usize, rest: []const u8, tokenType: TokenType) TokenType {
     return if (self.distance() == rest.len + startIndex and
-        std.mem.eql(u8, rest, self.start[startIndex..self.distance()])) tokenType else TokenType.IDENTIFIER;
+        std.mem.eql(u8, rest, self.start[startIndex..self.distance()])) tokenType else TokenType.TOKEN_IDENTIFIER;
 }
 
 inline fn distance(self: *Lexer) usize {
@@ -211,14 +211,14 @@ test "Scan Token" {
     var source: []const u8 = "()!=\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.LEFT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_LEFT_PARENTHESIZE, token.token_type);
     try std.testing.expectEqualSlices(u8, source[0..1], token.asLexeme());
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.RIGHT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_RIGHT_PARENTHESIZE, token.token_type);
     try std.testing.expectEqualSlices(u8, source[1..2], token.asLexeme());
     token = lexer.scanToken();
     std.debug.print("token: {}\n", .{token.token_type});
-    try std.testing.expectEqual(TokenType.BANG_EQUAL, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_BANG_EQUAL, token.token_type);
     try std.testing.expectEqualSlices(u8, source[2..4], token.asLexeme());
 }
 
@@ -226,10 +226,10 @@ test "Can handle whitespaces" {
     var source: []const u8 = " ( ) \x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.LEFT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_LEFT_PARENTHESIZE, token.token_type);
     try std.testing.expectEqualSlices(u8, source[1..2], token.asLexeme());
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.RIGHT_PARENTHESIZE, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_RIGHT_PARENTHESIZE, token.token_type);
     try std.testing.expectEqualSlices(u8, source[3..4], token.asLexeme());
 }
 
@@ -237,14 +237,14 @@ test "Can handle comments" {
     var source: []const u8 = " // this is a comment\n\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.EOF, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_EOF, token.token_type);
 }
 
 test "Can handle strings" {
     var source: []const u8 = "\"zen\"\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.STRING, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_STRING, token.token_type);
     try std.testing.expectEqualSlices(u8, source[0..5], token.asLexeme());
 }
 
@@ -252,6 +252,6 @@ test "Can scan Numbers" {
     var source: []const u8 = "123\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.NUMBER, token.token_type);
+    try std.testing.expectEqual(TokenType.TOKEN_NUMBER, token.token_type);
     try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
 }
