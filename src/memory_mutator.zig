@@ -3,16 +3,20 @@ const Value = @import("value.zig").Value;
 const Object = @import("object.zig").Object;
 const ObjectType = @import("object.zig").ObjectType;
 const ObjectString = @import("object.zig").ObjectString;
+const fnv1a = @import("fnv1a.zig");
+const Table = @import("table.zig");
 
 const MemoryMutator = @This();
 
 allocator: std.mem.Allocator = undefined,
 objects: std.ArrayList(*Object) = undefined,
+strings: Table,
 
 pub fn init(allocator: std.mem.Allocator) MemoryMutator {
     return MemoryMutator{
         .allocator = allocator,
         .objects = std.ArrayList(*Object).init(allocator),
+        .strings = Table.init(allocator),
     };
 }
 
@@ -25,11 +29,18 @@ pub fn deinit(self: *MemoryMutator) !void {
         }
     }
     self.objects.deinit();
+    self.strings.deinit();
 }
 
 pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     var object_string = try self.allocator.create(ObjectString);
     object_string.chars = try self.allocator.dupe(u8, chars);
+    object_string.hash = fnv1a.hash(chars);
+    const interned = self.strings.get(object_string);
+    if (interned != null) {
+        try self.destroyStringObject(&object_string.object);
+        return interned.?;
+    }
     try self.objects.append(&(object_string.object));
     return Value{ .VAL_OBJECT = &(object_string.object) };
 }
@@ -43,6 +54,7 @@ pub fn concatenateStringObjects(self: *MemoryMutator, left: *ObjectString, right
     }
     var object_string = try self.allocator.create(ObjectString);
     object_string.chars = chars;
+    object_string.hash = fnv1a.hash(chars);
     try self.objects.append(&(object_string.object));
     return Value{ .VAL_OBJECT = &(object_string.object) };
 }

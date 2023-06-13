@@ -36,6 +36,7 @@ pub const Object = struct {
 pub const ObjectString = struct {
     object: Object,
     chars: []const u8,
+    hash: u64,
 
     pub fn isEqual(self: *ObjectString, other: *ObjectString) bool {
         return self.chars.len == other.chars.len and std.mem.eql(u8, self.chars, other.chars);
