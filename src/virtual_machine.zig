@@ -98,8 +98,8 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
             .OP_NOT_EQUAL => self.values.push(Value{ .VAL_BOOL = !a.isEqual(b) }),
             .OP_ADD => {
                 if (a.isObject() and b.isObject() and a.VAL_OBJECT.object_type == ObjectType.OBJ_STRING and b.VAL_OBJECT.object_type == ObjectType.OBJ_STRING) {
-                    var a_string = try a.VAL_OBJECT.as(ObjectString);
-                    var b_string = try b.VAL_OBJECT.as(ObjectString);
+                    var a_string = a.VAL_OBJECT.as(ObjectString);
+                    var b_string = b.VAL_OBJECT.as(ObjectString);
                     var new_string = try self.memory_mutator.concatenateStringObjects(a_string, b_string);
                     self.values.push(new_string);
                 } else {

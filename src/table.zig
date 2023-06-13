@@ -82,7 +82,11 @@ fn findEntry(self: *Table, key: *ObjectString) *Entry {
     var tombstone: ?*Entry = null;
     while (true) {
         var entry = self.entries[index];
-        if (entry.key == null) {
+        if (entry.key) |entry_key| {
+            if (entry_key.chars.len == key.chars.len and entry_key.hash == key.hash and std.mem.eql(u8, entry_key.chars, key.chars)) {
+                return &entry;
+            }
+        } else {
             switch (entry.value) {
                 .VAL_NULL => return tombstone orelse &entry,
                 else => {
@@ -91,8 +95,6 @@ fn findEntry(self: *Table, key: *ObjectString) *Entry {
                     }
                 },
             }
-        } else if (entry.key.?.isEqual(key)) {
-            return &entry;
         }
         index = @mod((index + 1), self.capacity);
     }
@@ -127,10 +129,7 @@ fn findString(self: *Table, chars: []const u8, hash: u32) ?*Entry {
 fn adjustCapacity(self: *Table, new_capacity: usize) void {
     self.count = 0;
     const new_entries = try self.allocater.alloc(Entry, new_capacity);
-    for (new_entries) |entry| {
-        entry.key = null;
-        entry.value = Value{ .VAL_NULL = undefined };
-    }
+    // Copy the entries from the old table to the new table.
     for (self.entries) |entry| {
         if (entry.key == null) {
             continue;

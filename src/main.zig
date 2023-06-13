@@ -11,12 +11,11 @@ pub fn main() !void {
     defer vm.deinit();
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    if (args.len == 1) {
-        try repl(allocator, &vm);
-    } else if (args.len == 2) {
-        try runFile(args[1], allocator, &vm);
-    } else {
-        try show_usage(&writter);
+    switch (args.len) {
+        0 => unreachable,
+        1 => try repl(allocator, &vm),
+        2 => try runFile(args[1], allocator, &vm),
+        else => try show_usage(&writter),
     }
 }
 
@@ -37,6 +36,8 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
 
 fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     var fileContent = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
+    fileContent = try allocator.realloc(fileContent, fileContent.len + 1);
+    fileContent[fileContent.len - 1] = 0;
     defer allocator.free(fileContent);
     try run(fileContent, allocator, vm);
 }

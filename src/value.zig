@@ -53,7 +53,7 @@ pub const Value = union(Type) {
             .VAL_NULL => return other.isNull(),
             .VAL_BOOL => return other.isBool() and self.VAL_BOOL == other.VAL_BOOL,
             .VAL_NUMBER => return other.isNumber() and self.VAL_NUMBER == other.VAL_NUMBER,
-            .VAL_OBJECT => return other.isObject() and try self.VAL_OBJECT.isEqual(other.VAL_OBJECT),
+            .VAL_OBJECT => return other.isObject() and self.VAL_OBJECT.isEqual(other.VAL_OBJECT),
         }
     }
 
@@ -73,7 +73,7 @@ pub const Value = union(Type) {
             .VAL_NULL => std.debug.print("null", .{}),
             .VAL_BOOL => std.debug.print("{}", .{self.VAL_BOOL}),
             .VAL_NUMBER => std.debug.print("{d}", .{self.VAL_NUMBER}),
-            .VAL_OBJECT => std.debug.print("object ", .{}),
+            .VAL_OBJECT => self.VAL_OBJECT.printDebug(),
         }
     }
 };

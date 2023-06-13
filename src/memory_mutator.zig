@@ -37,9 +37,9 @@ pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     object_string.chars = try self.allocator.dupe(u8, chars);
     object_string.hash = fnv1a.hash(chars);
     const interned = self.strings.get(object_string);
-    if (interned != null) {
+    if (interned) |in| {
         try self.destroyStringObject(&object_string.object);
-        return interned.?;
+        return in;
     }
     try self.objects.append(&(object_string.object));
     return Value{ .VAL_OBJECT = &(object_string.object) };
@@ -55,12 +55,17 @@ pub fn concatenateStringObjects(self: *MemoryMutator, left: *ObjectString, right
     var object_string = try self.allocator.create(ObjectString);
     object_string.chars = chars;
     object_string.hash = fnv1a.hash(chars);
+    const interned = self.strings.get(object_string);
+    if (interned) |in| {
+        try self.destroyStringObject(&object_string.object);
+        return in;
+    }
     try self.objects.append(&(object_string.object));
     return Value{ .VAL_OBJECT = &(object_string.object) };
 }
 
 pub fn destroyStringObject(self: *MemoryMutator, object: *Object) !void {
-    var string_object: *ObjectString = try object.as(ObjectString);
+    var string_object: *ObjectString = object.as(ObjectString);
     self.allocator.free(string_object.chars);
     self.allocator.destroy(string_object);
 }
