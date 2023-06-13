@@ -7,7 +7,7 @@ pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = general_purpose_allocator.allocator();
     defer _ = general_purpose_allocator.deinit();
-    var vm = VirtualMachine.init(&writter);
+    var vm = VirtualMachine.init(&writter, allocator);
     defer vm.deinit();
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -25,23 +25,28 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     while (true) {
         try std.io.getStdOut().writer().print(">> ", .{});
         const input = try stdin.reader().readUntilDelimiterAlloc(allocator, '\n', 1024);
-        defer allocator.free(input);
         // No input
         if (input.len == 1) {
+            allocator.free(input);
             break;
         }
-        if (try vm.interpret(allocator, input) == InterpretResult.COMPILE_ERROR) {
-            std.debug.print("Compile error\n", .{});
-        }
+        try run(input, allocator, vm);
+        allocator.free(input);
     }
 }
 
 fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     var fileContent = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
-    if (try vm.interpret(allocator, fileContent) == InterpretResult.COMPILE_ERROR) {
-        std.debug.print("Compile error\n", .{});
-    }
     defer allocator.free(fileContent);
+    try run(fileContent, allocator, vm);
+}
+
+fn run(code: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
+    switch (try vm.interpret(allocator, code)) {
+        InterpretResult.OK => {},
+        InterpretResult.COMPILE_ERROR => std.debug.print("Compile error\n", .{}),
+        InterpretResult.RUNTIME_ERROR => std.debug.print("Runtime error\n", .{}),
+    }
 }
 
 fn show_usage(writter: *const std.fs.File.Writer) !void {

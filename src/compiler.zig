@@ -6,12 +6,16 @@ const OpCode = @import("chunk.zig").OpCode;
 const TokenType = @import("token.zig").TokenType;
 const Token = @import("token.zig");
 const Value = @import("value.zig").Value;
+const Object = @import("object.zig").Object;
+const ObjectString = @import("object.zig").ObjectString;
+const MemoryMutator = @import("memory_mutator.zig");
 
 const Compiler = @This();
 parser: Parser,
 lexer: Lexer,
 compiling_chunk: *Chunk = undefined,
 print_bytecode: bool = @import("debug_options").printBytecode,
+memory_mutator: *MemoryMutator = undefined,
 
 const Parser = struct {
     current: Token = undefined,
@@ -60,13 +64,16 @@ fn initRules() void {
     rules.set(.TOKEN_GREATER_EQUAL, ParseRule{ .infix = binary, .precedence = .PREC_COMPARISON });
     rules.set(.TOKEN_LESS, ParseRule{ .infix = binary, .precedence = .PREC_COMPARISON });
     rules.set(.TOKEN_LESS_EQUAL, ParseRule{ .infix = binary, .precedence = .PREC_COMPARISON });
+    rules.set(.TOKEN_STRING, ParseRule{ .prefix = string });
 }
 
-pub fn init() Compiler {
+// Maybe pass in the memory manager here?
+pub fn init(memory_mutator: *MemoryMutator) Compiler {
     initRules();
     return Compiler{
         .parser = Parser{},
         .lexer = undefined,
+        .memory_mutator = memory_mutator,
     };
 }
 
@@ -115,6 +122,11 @@ fn literal(self: *Compiler) !void {
     }
 }
 
+fn string(self: *Compiler) !void {
+    const lexeme = self.parser.previous.asLexeme();
+    try self.emitConstant(try self.memory_mutator.createStringObjectValue(lexeme[1 .. lexeme.len - 1]));
+}
+
 fn emitConstant(self: *Compiler, value: Value) !void {
     const index = try self.makeConstant(value);
     if (index > @intCast(usize, std.math.maxInt(u24))) {
@@ -146,8 +158,8 @@ fn unary(self: *Compiler) !void {
     const operator_type = self.parser.previous.token_type;
     try self.parsePrecedence(.PREC_UNARY);
     switch (operator_type) {
-        .TOKEN_MINUS => try self.emitOpcode(OpCode.OP_NEGATE),
-        .TOKEN_BANG => try self.emitOpcode(OpCode.OP_NOT),
+        .TOKEN_MINUS => try self.emitOpcode(.OP_NEGATE),
+        .TOKEN_BANG => try self.emitOpcode(.OP_NOT),
         else => unreachable,
     }
 }

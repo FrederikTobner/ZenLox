@@ -3,6 +3,10 @@ const Chunk = @import("chunk.zig");
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const Compiler = @import("compiler.zig");
+const Object = @import("object.zig").Object;
+const ObjectString = @import("object.zig").ObjectString;
+const ObjectType = @import("object.zig").ObjectType;
+const MemoryMutator = @import("memory_mutator.zig");
 
 pub const InterpretResult = enum {
     OK,
@@ -45,21 +49,25 @@ instruction_index: u32 = 0,
 trace_execution: bool = @import("debug_options").traceExecution,
 values: ValueStack = undefined,
 writer: *const std.fs.File.Writer,
-pub fn init(writer: *const std.fs.File.Writer) VirtualMachine {
+memory_mutator: MemoryMutator = undefined,
+pub fn init(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator) VirtualMachine {
     var value_stack = ValueStack{};
     value_stack.resetStack();
     return VirtualMachine{
         .values = value_stack,
         .writer = writer,
+        .memory_mutator = MemoryMutator.init(allocator),
     };
 }
+
 pub fn deinit(self: *VirtualMachine) void {
-    _ = self;
+    try self.memory_mutator.deinit();
 }
+
 pub fn interpret(self: *VirtualMachine, allocator: std.mem.Allocator, source: []u8) !InterpretResult {
     var chunk = Chunk.init(allocator);
     defer chunk.deinit();
-    var compiler = Compiler.init();
+    var compiler = Compiler.init(&self.memory_mutator);
     if (try compiler.compile(source, &chunk)) {
         self.chunk = &chunk;
         self.instruction_index = 0;
@@ -69,7 +77,7 @@ pub fn interpret(self: *VirtualMachine, allocator: std.mem.Allocator, source: []
     }
 }
 
-fn binaryOperation(self: *VirtualMachine, op: OpCode) void {
+fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
     var b: Value = self.values.pop();
     var a: Value = self.values.pop();
     if (a.isNumber() and b.isNumber()) {
@@ -85,7 +93,21 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) void {
             else => unreachable,
         }
     } else {
-        std.debug.panic("Operands must be two numbers.", .{});
+        switch (op) {
+            .OP_EQUAL => self.values.push(Value{ .VAL_BOOL = a.isEqual(b) }),
+            .OP_NOT_EQUAL => self.values.push(Value{ .VAL_BOOL = !a.isEqual(b) }),
+            .OP_ADD => {
+                if (a.isObject() and b.isObject() and a.VAL_OBJECT.object_type == ObjectType.OBJ_STRING and b.VAL_OBJECT.object_type == ObjectType.OBJ_STRING) {
+                    var a_string = try a.VAL_OBJECT.as(ObjectString);
+                    var b_string = try b.VAL_OBJECT.as(ObjectString);
+                    var new_string = try self.memory_mutator.concatenateStringObjects(a_string, b_string);
+                    self.values.push(new_string);
+                } else {
+                    std.debug.print("Operands must be two numbers or two strings.", .{});
+                }
+            },
+            else => std.debug.print("Operands must be two numbers.", .{}),
+        }
     }
 }
 fn run(self: *VirtualMachine) !InterpretResult {
@@ -119,28 +141,20 @@ fn run(self: *VirtualMachine) !InterpretResult {
                 return InterpretResult.OK;
             },
             .OP_NEGATE => self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
-            .OP_ADD => self.binaryOperation(.OP_ADD),
-            .OP_SUBTRACT => self.binaryOperation(.OP_SUBTRACT),
-            .OP_MULTIPLY => self.binaryOperation(.OP_MULTIPLY),
-            .OP_DIVIDE => self.binaryOperation(.OP_DIVIDE),
+            .OP_ADD => try self.binaryOperation(.OP_ADD),
+            .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
+            .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
+            .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
             .OP_NULL => self.values.push(Value{ .VAL_NULL = undefined }),
             .OP_TRUE => self.values.push(Value{ .VAL_BOOL = true }),
             .OP_FALSE => self.values.push(Value{ .VAL_BOOL = false }),
             .OP_NOT => self.values.push(Value{ .VAL_BOOL = self.values.pop().isFalsey() }),
-            .OP_EQUAL => {
-                var b: Value = self.values.pop();
-                var a: Value = self.values.pop();
-                self.values.push(Value{ .VAL_BOOL = a.isEqual(b) });
-            },
-            .OP_GREATER => self.binaryOperation(.OP_GREATER),
-            .OP_LESS => self.binaryOperation(.OP_LESS),
-            .OP_NOT_EQUAL => {
-                var b: Value = self.values.pop();
-                var a: Value = self.values.pop();
-                self.values.push(Value{ .VAL_BOOL = !a.isEqual(b) });
-            },
-            .OP_GREATER_EQUAL => self.binaryOperation(.OP_GREATER_EQUAL),
-            .OP_LESS_EQUAL => self.binaryOperation(.OP_LESS_EQUAL),
+            .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
+            .OP_GREATER => try self.binaryOperation(.OP_GREATER),
+            .OP_LESS => try self.binaryOperation(.OP_LESS),
+            .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
+            .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
+            .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
         }
     }
     return InterpretResult.OK;

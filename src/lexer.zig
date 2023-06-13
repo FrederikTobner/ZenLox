@@ -156,39 +156,39 @@ fn number(self: *Lexer) Token {
 
 fn identifierType(self: *Lexer) TokenType {
     switch (self.start[0]) {
-        'a' => return self.checkKeyword(1, "nd", TokenType.TOKEN_AND),
-        'c' => return self.checkKeyword(1, "lass", TokenType.TOKEN_CLASS),
-        'e' => return self.checkKeyword(1, "lse", TokenType.TOKEN_ELSE),
+        'a' => return self.checkKeyword(1, "nd", .TOKEN_AND),
+        'c' => return self.checkKeyword(1, "lass", .TOKEN_CLASS),
+        'e' => return self.checkKeyword(1, "lse", .TOKEN_ELSE),
         'f' => {
             if (self.distance() > 1) {
                 switch (self.start[1]) {
-                    'a' => return self.checkKeyword(2, "lse", TokenType.TOKEN_FALSE),
-                    'o' => return self.checkKeyword(2, "r", TokenType.TOKEN_FOR),
-                    'u' => return self.checkKeyword(2, "n", TokenType.TOKEN_FUN),
+                    'a' => return self.checkKeyword(2, "lse", .TOKEN_FALSE),
+                    'o' => return self.checkKeyword(2, "r", .TOKEN_FOR),
+                    'u' => return self.checkKeyword(2, "n", .TOKEN_FUN),
                     else => {},
                 }
             }
         },
-        'i' => return self.checkKeyword(1, "f", TokenType.TOKEN_IF),
-        'n' => return self.checkKeyword(1, "ull", TokenType.TOKEN_NULL),
-        'o' => return self.checkKeyword(1, "r", TokenType.TOKEN_OR),
-        'p' => return self.checkKeyword(1, "rint", TokenType.TOKEN_PRINT),
-        'r' => return self.checkKeyword(1, "eturn", TokenType.TOKEN_RETURN),
-        's' => return self.checkKeyword(1, "uper", TokenType.TOKEN_SUPER),
+        'i' => return self.checkKeyword(1, "f", .TOKEN_IF),
+        'n' => return self.checkKeyword(1, "ull", .TOKEN_NULL),
+        'o' => return self.checkKeyword(1, "r", .TOKEN_OR),
+        'p' => return self.checkKeyword(1, "rint", .TOKEN_PRINT),
+        'r' => return self.checkKeyword(1, "eturn", .TOKEN_RETURN),
+        's' => return self.checkKeyword(1, "uper", .TOKEN_SUPER),
         't' => {
             if (self.distance() > 1) {
                 switch (self.start[1]) {
-                    'h' => return self.checkKeyword(2, "is", TokenType.TOKEN_THIS),
-                    'r' => return self.checkKeyword(2, "ue", TokenType.TOKEN_TRUE),
+                    'h' => return self.checkKeyword(2, "is", .TOKEN_THIS),
+                    'r' => return self.checkKeyword(2, "ue", .TOKEN_TRUE),
                     else => {},
                 }
             }
         },
-        'v' => return self.checkKeyword(1, "ar", TokenType.TOKEN_VAR),
-        'w' => return self.checkKeyword(1, "hile", TokenType.TOKEN_WHILE),
+        'v' => return self.checkKeyword(1, "ar", .TOKEN_VAR),
+        'w' => return self.checkKeyword(1, "hile", .TOKEN_WHILE),
         else => {},
     }
-    return TokenType.TOKEN_IDENTIFIER;
+    return .TOKEN_IDENTIFIER;
 }
 
 fn identifier(self: *Lexer) Token {

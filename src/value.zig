@@ -48,12 +48,12 @@ pub const Value = union(Type) {
         };
     }
 
-    pub fn isEqual(self: Value, other_value: Value) bool {
+    pub fn isEqual(self: Value, other: Value) bool {
         switch (self) {
-            .VAL_NULL => return other_value.isNull(),
-            .VAL_BOOL => return other_value.isBool() and self.VAL_BOOL == other_value.VAL_BOOL,
-            .VAL_NUMBER => return other_value.isNumber() and self.VAL_NUMBER == other_value.VAL_NUMBER,
-            .VAL_OBJECT => return other_value.isObject() and self.VAL_OBJECT == other_value.VAL_OBJECT,
+            .VAL_NULL => return other.isNull(),
+            .VAL_BOOL => return other.isBool() and self.VAL_BOOL == other.VAL_BOOL,
+            .VAL_NUMBER => return other.isNumber() and self.VAL_NUMBER == other.VAL_NUMBER,
+            .VAL_OBJECT => return other.isObject() and try self.VAL_OBJECT.isEqual(other.VAL_OBJECT),
         }
     }
 
@@ -63,7 +63,7 @@ pub const Value = union(Type) {
             .VAL_NULL => try writer.print("null", .{}),
             .VAL_BOOL => try writer.print("{}", .{self.VAL_BOOL}),
             .VAL_NUMBER => try writer.print("{d}", .{self.VAL_NUMBER}),
-            .VAL_OBJECT => try writer.print("object", .{}),
+            .VAL_OBJECT => try self.VAL_OBJECT.print(writer),
         }
     }
 
@@ -73,7 +73,7 @@ pub const Value = union(Type) {
             .VAL_NULL => std.debug.print("null", .{}),
             .VAL_BOOL => std.debug.print("{}", .{self.VAL_BOOL}),
             .VAL_NUMBER => std.debug.print("{d}", .{self.VAL_NUMBER}),
-            .VAL_OBJECT => std.debug.print("object", .{}),
+            .VAL_OBJECT => std.debug.print("object ", .{}),
         }
     }
 };

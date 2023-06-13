@@ -30,12 +30,20 @@ lines: std.ArrayList(u32),
 values: std.ArrayList(Value),
 
 // Initializes a new chunk
+// Every chunk needs to be deinitialized with `deinit` after it's no longer needed
 pub fn init(allocator: std.mem.Allocator) Chunk {
     return Chunk{
         .byte_code = std.ArrayList(u8).init(allocator),
         .lines = std.ArrayList(u32).init(allocator),
         .values = std.ArrayList(Value).init(allocator),
     };
+}
+
+// Deinitializes the chunk
+pub fn deinit(self: *Chunk) void {
+    self.byte_code.deinit();
+    self.lines.deinit();
+    self.values.deinit();
 }
 
 // Appends an opcode to the chunk
@@ -62,13 +70,6 @@ pub fn writeShortWord(self: *Chunk, sword: u24, line: u32) !void {
 pub fn addConstant(self: *Chunk, value: Value) !usize {
     try self.values.append(value);
     return self.values.items.len - 1;
-}
-
-// Deinitializes the chunk
-pub fn deinit(self: *Chunk) void {
-    self.byte_code.deinit();
-    self.lines.deinit();
-    self.values.deinit();
 }
 
 // Disassembles all the instructions in the chunk
