@@ -38,11 +38,14 @@ pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     object_string.hash = fnv1a.hash(chars);
     const interned = self.strings.get(object_string);
     if (interned) |in| {
+        std.debug.print("interned string\n", .{});
         try self.destroyStringObject(&object_string.object);
         return in;
     }
     try self.objects.append(&(object_string.object));
-    return Value{ .VAL_OBJECT = &(object_string.object) };
+    const result = Value{ .VAL_OBJECT = &(object_string.object) };
+    _ = try self.strings.set(object_string, result);
+    return result;
 }
 
 pub fn concatenateStringObjects(self: *MemoryMutator, left: *ObjectString, right: *ObjectString) !Value {

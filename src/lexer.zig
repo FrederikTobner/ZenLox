@@ -154,6 +154,9 @@ fn number(self: *Lexer) Token {
     return self.makeToken(TokenType.TOKEN_NUMBER);
 }
 
+/// Checks if the current token is a keyword.
+/// If it is, it returns the token type of the keyword.
+/// Otherwise, it returns `TOKEN_IDENTIFIER`.
 fn identifierType(self: *Lexer) TokenType {
     switch (self.start[0]) {
         'a' => return self.checkKeyword(1, "nd", .TOKEN_AND),
@@ -254,4 +257,15 @@ test "Can scan Numbers" {
     var token = lexer.scanToken();
     try std.testing.expectEqual(TokenType.TOKEN_NUMBER, token.token_type);
     try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
+}
+
+test "Can handle identifiers" {
+    var source: []const u8 = "x y\x00";
+    var lexer = Lexer.init(source);
+    var token = lexer.scanToken();
+    try std.testing.expectEqual(TokenType.TOKEN_IDENTIFIER, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[0..1], token.asLexeme());
+    token = lexer.scanToken();
+    try std.testing.expectEqual(TokenType.TOKEN_IDENTIFIER, token.token_type);
+    try std.testing.expectEqualSlices(u8, source[2..3], token.asLexeme());
 }

@@ -7,10 +7,13 @@ pub const ObjectType = enum {
 /// Base object type
 pub const Object = struct {
     object_type: ObjectType,
+
+    /// Casts the object to the given type
     pub fn as(self: *Object, comptime Type: type) *Type {
         return @fieldParentPtr(Type, "object", self);
     }
 
+    /// Returns true if the object is equal to the other object, false otherwise
     pub fn isEqual(self: *Object, other: *Object) bool {
         if (self.object_type != other.object_type) {
             return false;
@@ -21,12 +24,14 @@ pub const Object = struct {
         }
     }
 
-    pub fn print(self: *Object, writter: *const std.fs.File.Writer) !void {
+    /// Prints the object to stdout using the given `std.fs.File.Writer`
+    pub fn print(self: *Object, writer: *const std.fs.File.Writer) !void {
         switch (self.object_type) {
-            .OBJ_STRING => try self.as(ObjectString).print(writter),
+            .OBJ_STRING => try self.as(ObjectString).print(writer),
         }
     }
 
+    /// Print the object to stderr - only for debugging
     pub fn printDebug(self: *Object) void {
         switch (self.object_type) {
             .OBJ_STRING => self.as(ObjectString).printDebug(),
@@ -40,10 +45,12 @@ pub const ObjectString = struct {
     chars: []const u8,
     hash: u64,
 
-    pub fn print(self: *ObjectString, writter: *const std.fs.File.Writer) !void {
-        try writter.print("{s}", .{self.chars});
+    /// Prints the string to stdout using the given `std.fs.File.Writer`
+    pub fn print(self: *ObjectString, writer: *const std.fs.File.Writer) !void {
+        try writer.print("{s}", .{self.chars});
     }
 
+    /// Print the string to stderr - only for debugging
     pub fn printDebug(self: *ObjectString) void {
         std.debug.print("{s}", .{self.chars});
     }

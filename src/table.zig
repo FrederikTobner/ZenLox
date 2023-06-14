@@ -36,17 +36,17 @@ pub fn deinit(self: *Table) void {
 }
 
 /// Sets the given key to the given value.
-pub fn set(self: *Table, key: *ObjectString, value: Value) bool {
-    if (self.count >= (@intToFloat(f64, self.capacity) * table_max_load_factor)) {
-        self.adjustCapacity(self.growCapacy());
+pub fn set(self: *Table, key: *ObjectString, value: Value) !bool {
+    if (@intToFloat(f64, self.count) >= (@intToFloat(f64, self.capacity) * table_max_load_factor)) {
+        try self.adjustCapacity(self.growCapacy());
     }
-    const entry = self.findEntry(key);
+    const entry: *Entry = self.findEntry(key);
     const is_new_key = entry.key == null;
-    if (is_new_key and entry.value == Value{ .VAL_NULL = undefined }) {
+    if (is_new_key and entry.value.isEqual(Value{ .VAL_NULL = undefined })) {
         self.count += 1;
     }
-    entry.key = key;
-    entry.value = value;
+    entry.*.key = key;
+    entry.*.value = value;
     return is_new_key;
 }
 
@@ -81,17 +81,17 @@ fn findEntry(self: *Table, key: *ObjectString) *Entry {
     var index = @mod(key.hash, self.capacity);
     var tombstone: ?*Entry = null;
     while (true) {
-        var entry = self.entries[index];
+        var entry: *Entry = &self.entries[index];
         if (entry.key) |entry_key| {
             if (entry_key.chars.len == key.chars.len and entry_key.hash == key.hash and std.mem.eql(u8, entry_key.chars, key.chars)) {
-                return &entry;
+                return entry;
             }
         } else {
             switch (entry.value) {
-                .VAL_NULL => return tombstone orelse &entry,
+                .VAL_NULL => return tombstone orelse entry,
                 else => {
                     if (tombstone == null) {
-                        tombstone = &entry;
+                        tombstone = entry;
                     }
                 },
             }
@@ -108,10 +108,10 @@ fn findString(self: *Table, chars: []const u8, hash: u32) ?*Entry {
     var index = @mod(hash, self.capacity);
     var tombstone: ?*Entry = null;
     while (true) {
-        var entry = self.entries[index];
+        var entry: *Entry = &self.entries[index];
         if (entry.key == null) {
             switch (entry.value) {
-                .VAL_NULL => return tombstone orelse &entry,
+                .VAL_NULL => return tombstone orelse entry,
                 else => {
                     if (tombstone == null) {
                         tombstone = entry;
@@ -126,20 +126,27 @@ fn findString(self: *Table, chars: []const u8, hash: u32) ?*Entry {
 }
 
 /// Adjusts the capacity of the table to the given capacity.
-fn adjustCapacity(self: *Table, new_capacity: usize) void {
+fn adjustCapacity(self: *Table, new_capacity: usize) !void {
     self.count = 0;
-    const new_entries = try self.allocater.alloc(Entry, new_capacity);
-    // Copy the entries from the old table to the new table.
-    for (self.entries) |entry| {
-        if (entry.key == null) {
+    var new_entries = try self.allocator.alloc(Entry, new_capacity);
+    var start_index: usize = 0;
+    while (start_index < new_capacity) {
+        new_entries[start_index] = Entry{ .key = null, .value = Value{ .VAL_NULL = undefined } };
+        start_index += 1;
+    }
+    if (self.capacity > 0) {
+        // Copy the entries from the old table to the new table.
+        for (self.entries) |entry| {
+            if (entry.key) |entry_key| {
+                const new_entry = self.findEntry(entry_key);
+                new_entry.key = entry_key;
+                new_entry.value = entry.value;
+                self.count += 1;
+            }
             continue;
         }
-        const new_entry = new_entries.findEntry(entry.key);
-        new_entry.key = entry.key;
-        new_entry.value = entry.value;
-        self.count += 1;
+        self.allocator.free(self.entries);
     }
-    self.allocator.free(self.entries);
     self.entries = new_entries;
     self.capacity = new_capacity;
 }
@@ -147,4 +154,15 @@ fn adjustCapacity(self: *Table, new_capacity: usize) void {
 /// Calculates the new capacity of the table.
 fn growCapacy(self: *Table) usize {
     return if (@intToFloat(f64, self.capacity) * table_growth_factor > table_init_capacity) self.capacity * 2 else table_init_capacity;
+}
+
+test "Can find entries" {
+    var table = Table.init(std.heap.page_allocator);
+    defer table.deinit();
+    var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
+    var value = Value{ .VAL_NUMBER = 1234.0 };
+    try std.testing.expect(try table.set(&key, value));
+    var entry = table.findEntry(&key);
+    try std.testing.expect(entry.key != null);
+    try std.testing.expect(entry.value.isEqual(value));
 }
