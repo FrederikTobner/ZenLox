@@ -41,6 +41,10 @@ const ValueStack = struct {
         self.stack_top_index -= 1;
         return self.stack[self.stack_top_index];
     }
+
+    fn peek(self: *ValueStack, distance: u8) Value {
+        return self.stack[self.stack_top_index - 1 - distance];
+    }
 };
 
 const VirtualMachine = @This();
@@ -50,13 +54,16 @@ trace_execution: bool = @import("debug_options").traceExecution,
 values: ValueStack = undefined,
 writer: *const std.fs.File.Writer,
 memory_mutator: MemoryMutator = undefined,
+compiler: Compiler = undefined,
 pub fn init(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator) VirtualMachine {
     var value_stack = ValueStack{};
     value_stack.resetStack();
+    var memory_mutator = MemoryMutator.init(allocator);
     return VirtualMachine{
         .values = value_stack,
         .writer = writer,
-        .memory_mutator = MemoryMutator.init(allocator),
+        .memory_mutator = memory_mutator,
+        .compiler = Compiler.init(&memory_mutator),
     };
 }
 
@@ -67,8 +74,7 @@ pub fn deinit(self: *VirtualMachine) void {
 pub fn interpret(self: *VirtualMachine, allocator: std.mem.Allocator, source: []u8) !InterpretResult {
     var chunk = Chunk.init(allocator);
     defer chunk.deinit();
-    var compiler = Compiler.init(&self.memory_mutator);
-    if (try compiler.compile(source, &chunk)) {
+    if (try self.compiler.compile(source, &chunk)) {
         self.chunk = &chunk;
         self.instruction_index = 0;
         return try self.run();
@@ -135,11 +141,7 @@ fn run(self: *VirtualMachine) !InterpretResult {
                 self.instruction_index += 3;
                 self.values.push(self.chunk.values.items[constant_index]);
             },
-            .OP_RETURN => {
-                try self.values.pop().print(self.writer);
-                try self.writer.print("\n", .{});
-                return InterpretResult.OK;
-            },
+            .OP_RETURN => return InterpretResult.OK,
             .OP_NEGATE => self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
             .OP_ADD => try self.binaryOperation(.OP_ADD),
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
@@ -155,7 +157,87 @@ fn run(self: *VirtualMachine) !InterpretResult {
             .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
             .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
             .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
+            .OP_PRINT => {
+                try self.values.pop().print(self.writer);
+                try self.writer.print("\n", .{});
+            },
+            .OP_POP => _ = self.values.pop(),
+            .OP_DEFINE_GLOBAL => {
+                self.instruction_index += 1;
+                var name = self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].VAL_OBJECT.as(ObjectString);
+                _ = try self.memory_mutator.globals.set(name, self.values.peek(0));
+                _ = self.values.pop();
+            },
+            .OP_DEFINE_GLOBAL_LONG => {
+                var name_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
+                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
+                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                self.instruction_index += 3;
+                var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
+                _ = try self.memory_mutator.globals.set(name, self.values.peek(0));
+                _ = self.values.pop();
+            },
+            .OP_GET_GLOBAL => {
+                self.instruction_index += 1;
+                var name = self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].VAL_OBJECT.as(ObjectString);
+                var value = self.memory_mutator.globals.get(name);
+                if (value) |val| {
+                    self.values.push(val);
+                } else {
+                    std.debug.print("Undefined variable '", .{});
+                    try name.print(self.writer);
+                    std.debug.print("'.\n", .{});
+                    return InterpretResult.RUNTIME_ERROR;
+                }
+            },
+            .OP_GET_GLOBAL_LONG => {
+                var name_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
+                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
+                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                self.instruction_index += 3;
+                var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
+                var value = self.memory_mutator.globals.get(name);
+                if (value) |val| {
+                    self.values.push(val);
+                } else {
+                    std.debug.print("Undefined variable '", .{});
+                    try name.print(self.writer);
+                    std.debug.print("'.\n", .{});
+                    return InterpretResult.RUNTIME_ERROR;
+                }
+            },
+            .OP_SET_GLOBAL => {
+                self.instruction_index += 1;
+                var name = self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].VAL_OBJECT.as(ObjectString);
+                var value = self.values.peek(0);
+                if (try self.memory_mutator.globals.set(name, value)) {
+                    _ = self.memory_mutator.globals.delete(name);
+                    std.debug.print("Undefined variable '", .{});
+                    try name.print(self.writer);
+                    std.debug.print("'.\n", .{});
+                    return InterpretResult.RUNTIME_ERROR;
+                }
+            },
+            .OP_SET_GLOBAL_LONG => {
+                var name_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
+                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
+                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                self.instruction_index += 3;
+                var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
+                var value = self.values.peek(0);
+                if (try self.memory_mutator.globals.set(name, value)) {
+                    _ = self.memory_mutator.globals.delete(name);
+                    std.debug.print("Undefined variable '", .{});
+                    try name.print(self.writer);
+                    std.debug.print("'.\n", .{});
+                    return InterpretResult.RUNTIME_ERROR;
+                }
+            },
         }
     }
     return InterpretResult.OK;
+}
+
+fn readString(self: *VirtualMachine) *ObjectString {
+    return self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].as(ObjectString);
 }

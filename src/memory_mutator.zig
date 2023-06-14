@@ -9,14 +9,16 @@ const Table = @import("table.zig");
 const MemoryMutator = @This();
 
 allocator: std.mem.Allocator = undefined,
-objects: std.ArrayList(*Object) = undefined,
+objects: std.ArrayList(*Object),
 strings: Table,
+globals: Table,
 
 pub fn init(allocator: std.mem.Allocator) MemoryMutator {
     return MemoryMutator{
         .allocator = allocator,
         .objects = std.ArrayList(*Object).init(allocator),
         .strings = Table.init(allocator),
+        .globals = Table.init(allocator),
     };
 }
 
@@ -30,6 +32,7 @@ pub fn deinit(self: *MemoryMutator) !void {
     }
     self.objects.deinit();
     self.strings.deinit();
+    self.globals.deinit();
 }
 
 pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {

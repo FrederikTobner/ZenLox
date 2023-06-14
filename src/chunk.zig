@@ -22,6 +22,14 @@ pub const OpCode = enum(u8) {
     OP_NOT_EQUAL,
     OP_GREATER_EQUAL,
     OP_LESS_EQUAL,
+    OP_PRINT,
+    OP_POP,
+    OP_DEFINE_GLOBAL,
+    OP_DEFINE_GLOBAL_LONG,
+    OP_GET_GLOBAL,
+    OP_GET_GLOBAL_LONG,
+    OP_SET_GLOBAL,
+    OP_SET_GLOBAL_LONG,
 };
 
 const Chunk = @This();
@@ -85,26 +93,12 @@ pub fn disassemble(self: *Chunk) void {
 // Disassembles a single instruction in the chunk
 pub fn disassembleInstruction(self: *Chunk, offset: *u32) void {
     switch (@intToEnum(OpCode, self.byte_code.items[offset.*])) {
-        .OP_RETURN => std.debug.print("OP_RETURN\n", .{}),
-        .OP_CONSTANT => {
-            var constantIndex: u8 = self.byte_code.items[offset.* + 1];
-            std.debug.print("OP_CONSTANT {d} '", .{constantIndex});
-            self.values.items[constantIndex].printDebug();
-            std.debug.print("'\n", .{});
-            offset.* += 1;
-        },
-        .OP_CONSTANT_LONG => {
-            var constantIndex: u24 = @intCast(u24, self.byte_code.items[offset.* + 1]) << 16;
-            constantIndex |= @intCast(u24, self.byte_code.items[offset.* + 2]) << 8;
-            constantIndex |= @intCast(u24, self.byte_code.items[offset.* + 3]);
-            std.debug.print("OP_CONSTANT_LONG {d} '", .{constantIndex});
-            self.values.items[constantIndex].printDebug();
-            std.debug.print("'\n", .{});
-            offset.* += 3;
-        },
-        .OP_NEGATE => std.debug.print("OP_NEGATE\n", .{}),
-        .OP_ADD => std.debug.print("OP_ADD\n", .{}),
-        .OP_SUBTRACT => std.debug.print("OP_SUBTRACT\n", .{}),
+        .OP_RETURN => simpleInstruction("OP_RETURN\n"),
+        .OP_CONSTANT => self.constantInstruction("OP_CONSTANT", offset),
+        .OP_CONSTANT_LONG => self.longConstantInstruction("OP_CONSTANT_LONG", offset),
+        .OP_NEGATE => simpleInstruction("OP_NEGATE\n"),
+        .OP_ADD => simpleInstruction("OP_ADD\n"),
+        .OP_SUBTRACT => simpleInstruction("OP_SUBTRACT\n"),
         .OP_MULTIPLY => simpleInstruction("OP_MULTIPLY"),
         .OP_DIVIDE => simpleInstruction("OP_DIVIDE"),
         .OP_NULL => simpleInstruction("OP_NULL"),
@@ -117,10 +111,36 @@ pub fn disassembleInstruction(self: *Chunk, offset: *u32) void {
         .OP_NOT_EQUAL => simpleInstruction("OP_NOT_EQUAL"),
         .OP_GREATER_EQUAL => simpleInstruction("OP_GREATER_EQUAL"),
         .OP_LESS_EQUAL => simpleInstruction("OP_LESS_EQUAL"),
+        .OP_PRINT => simpleInstruction("OP_PRINT"),
+        .OP_POP => simpleInstruction("OP_POP"),
+        .OP_DEFINE_GLOBAL => self.constantInstruction("OP_DEFINE_GLOBAL", offset),
+        .OP_DEFINE_GLOBAL_LONG => self.longConstantInstruction("OP_DEFINE_GLOBAL_LONG", offset),
+        .OP_GET_GLOBAL => self.constantInstruction("OP_GET_GLOBAL", offset),
+        .OP_GET_GLOBAL_LONG => self.longConstantInstruction("OP_GET_GLOBAL_LONG", offset),
+        .OP_SET_GLOBAL => self.constantInstruction("OP_SET_GLOBAL", offset),
+        .OP_SET_GLOBAL_LONG => self.longConstantInstruction("OP_SET_GLOBAL_LONG", offset),
     }
     offset.* += 1;
 }
 
 fn simpleInstruction(name: []const u8) void {
     std.debug.print("{s}\n", .{name});
+}
+
+fn constantInstruction(self: *Chunk, name: []const u8, offset: *u32) void {
+    var constantIndex: u8 = self.byte_code.items[offset.* + 1];
+    std.debug.print("{s} {d} '", .{ name, constantIndex });
+    self.values.items[constantIndex].printDebug();
+    std.debug.print("\n", .{});
+    offset.* += 1;
+}
+
+fn longConstantInstruction(self: *Chunk, name: []const u8, offset: *u32) void {
+    var constantIndex: u24 = @intCast(u24, self.byte_code.items[offset.* + 1]) << 16;
+    constantIndex |= @intCast(u24, self.byte_code.items[offset.* + 2]) << 8;
+    constantIndex |= @intCast(u24, self.byte_code.items[offset.* + 3]);
+    std.debug.print("{s} {d} '", .{ name, constantIndex });
+    self.values.items[constantIndex].printDebug();
+    std.debug.print("\n", .{});
+    offset.* += 3;
 }
