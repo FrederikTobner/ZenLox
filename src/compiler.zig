@@ -93,6 +93,9 @@ fn declaration(self: *Compiler) !void {
     } else {
         try self.statement();
     }
+    if (self.parser.panic_mode) {
+        self.synchronize();
+    }
 }
 
 fn varDeclaration(self: *Compiler) !void {
@@ -108,15 +111,15 @@ fn varDeclaration(self: *Compiler) !void {
 
 fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
     self.consume(.TOKEN_IDENTIFIER, error_message);
-    return try self.identifierConstant(&self.parser.previous);
+    return try self.identifierConstant(self.parser.previous);
 }
 
 fn defineVariable(self: *Compiler, global: u24) !void {
     try self.emitIndexOpcode(global, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG);
 }
 
-fn identifierConstant(self: *Compiler, name: *Token) !u24 {
-    return @intCast(u24, try self.makeConstant(try self.memory_mutator.createStringObjectValue(name.asLexeme())));
+fn identifierConstant(self: *Compiler, name: Token) !u24 {
+    return @intCast(u24, try self.makeConstant(try self.memory_mutator.createStringObjectValue(name.start[0..name.length])));
 }
 
 fn statement(self: *Compiler) !void {
@@ -140,12 +143,13 @@ fn expressionStatement(self: *Compiler) !void {
 }
 
 fn variable(self: *Compiler, can_assign: bool) !void {
-    try self.namedVariable(&self.parser.previous, can_assign);
+    try self.namedVariable(self.parser.previous, can_assign);
 }
 
-fn namedVariable(self: *Compiler, name: *Token, can_assign: bool) !void {
+fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
+    _ = can_assign;
     const arg = try self.identifierConstant(name);
-    if (can_assign) {
+    if (self.match(.TOKEN_EQUAL)) {
         try self.expression();
         try self.emitIndexOpcode(arg, .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
     } else {
@@ -165,9 +169,9 @@ fn synchronize(self: *Compiler) void {
             .TOKEN_VAR => return,
             .TOKEN_FOR => return,
             .TOKEN_IF => return,
-            .TOKEN_WHIL => return,
-            .TOKEN_PRIN => return,
-            .TOKEN_RETU => return,
+            .TOKEN_WHILE => return,
+            .TOKEN_PRINT => return,
+            .TOKEN_RETURN => return,
             else => {},
         }
         self.advance();
@@ -318,7 +322,7 @@ fn emitErrorAt(self: *Compiler, token: *Token, message: []const u8) void {
         return;
     }
     self.parser.panic_mode = true;
-    std.debug.print("[line {d}]Error: ", .{token.line});
+    std.debug.print("[line {d}]Error", .{token.line});
     if (token.token_type == .TOKEN_EOF) {
         std.debug.print(" at end", .{});
     } else if (token.token_type == .TOKEN_ERROR) {

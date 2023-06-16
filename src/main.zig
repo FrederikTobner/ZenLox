@@ -29,7 +29,7 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
             allocator.free(input);
             break;
         }
-        try run(input, allocator, vm);
+        try run(input, vm);
         allocator.free(input);
     }
 }
@@ -39,11 +39,11 @@ fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void 
     fileContent = try allocator.realloc(fileContent, fileContent.len + 1);
     fileContent[fileContent.len - 1] = 0;
     defer allocator.free(fileContent);
-    try run(fileContent, allocator, vm);
+    try run(fileContent, vm);
 }
 
-fn run(code: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
-    switch (try vm.interpret(allocator, code)) {
+fn run(code: []u8, vm: *VirtualMachine) !void {
+    switch (try vm.interpret(code)) {
         InterpretResult.OK => {},
         InterpretResult.COMPILE_ERROR => std.debug.print("Compile error\n", .{}),
         InterpretResult.RUNTIME_ERROR => std.debug.print("Runtime error\n", .{}),

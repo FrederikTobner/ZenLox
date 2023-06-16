@@ -63,6 +63,6 @@ pub fn asLexeme(self: *Token) []const u8 {
 
 test "Token asLexeme" {
     var source: []const u8 = "123456";
-    var token = Token.init(.TOKEN_NUMBER, @ptrCast([*]const u8, source), 1, 3);
+    var token: Token = Token.init(.TOKEN_NUMBER, @ptrCast([*]const u8, source), 1, 3);
     try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
 }

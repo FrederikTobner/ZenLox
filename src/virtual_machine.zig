@@ -48,35 +48,32 @@ const ValueStack = struct {
 };
 
 const VirtualMachine = @This();
-chunk: *Chunk = undefined,
+chunk: Chunk,
 instruction_index: u32 = 0,
 trace_execution: bool = @import("debug_options").traceExecution,
 values: ValueStack = undefined,
 writer: *const std.fs.File.Writer,
 memory_mutator: MemoryMutator = undefined,
-compiler: Compiler = undefined,
+
 pub fn init(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator) VirtualMachine {
     var value_stack = ValueStack{};
     value_stack.resetStack();
-    var memory_mutator = MemoryMutator.init(allocator);
     return VirtualMachine{
         .values = value_stack,
         .writer = writer,
-        .memory_mutator = memory_mutator,
-        .compiler = Compiler.init(&memory_mutator),
+        .memory_mutator = MemoryMutator.init(allocator),
+        .chunk = Chunk.init(allocator),
     };
 }
 
 pub fn deinit(self: *VirtualMachine) void {
     try self.memory_mutator.deinit();
+    self.chunk.deinit();
 }
 
-pub fn interpret(self: *VirtualMachine, allocator: std.mem.Allocator, source: []u8) !InterpretResult {
-    var chunk = Chunk.init(allocator);
-    defer chunk.deinit();
-    if (try self.compiler.compile(source, &chunk)) {
-        self.chunk = &chunk;
-        self.instruction_index = 0;
+pub fn interpret(self: *VirtualMachine, source: []u8) !InterpretResult {
+    var compiler = Compiler.init(&self.memory_mutator);
+    if (try compiler.compile(source, &self.chunk)) {
         return try self.run();
     } else {
         return InterpretResult.COMPILE_ERROR;
@@ -141,7 +138,10 @@ fn run(self: *VirtualMachine) !InterpretResult {
                 self.instruction_index += 3;
                 self.values.push(self.chunk.values.items[constant_index]);
             },
-            .OP_RETURN => return InterpretResult.OK,
+            .OP_RETURN => {
+                self.instruction_index += 1;
+                return InterpretResult.OK;
+            },
             .OP_NEGATE => self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
             .OP_ADD => try self.binaryOperation(.OP_ADD),
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),

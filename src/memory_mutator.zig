@@ -41,7 +41,6 @@ pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     object_string.hash = fnv1a.hash(chars);
     const interned = self.strings.get(object_string);
     if (interned) |in| {
-        std.debug.print("interned string\n", .{});
         try self.destroyStringObject(&object_string.object);
         return in;
     }
