@@ -147,9 +147,8 @@ fn variable(self: *Compiler, can_assign: bool) !void {
 }
 
 fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
-    _ = can_assign;
     const arg = try self.identifierConstant(name);
-    if (self.match(.TOKEN_EQUAL)) {
+    if (can_assign and self.match(.TOKEN_EQUAL)) {
         try self.expression();
         try self.emitIndexOpcode(arg, .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
     } else {

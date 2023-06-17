@@ -40,7 +40,7 @@ pub fn set(self: *Table, key: *ObjectString, value: Value) !bool {
     if (@intToFloat(f64, self.count) >= (@intToFloat(f64, self.capacity) * table_max_load_factor)) {
         try self.adjustCapacity(self.growCapacy());
     }
-    const entry: *Entry = self.findEntry(key);
+    const entry: *Entry = findEntry(self.entries, self.capacity, key);
     const is_new_key = entry.key == null;
     if (is_new_key and entry.value.isEqual(Value{ .VAL_NULL = undefined })) {
         self.count += 1;
@@ -56,7 +56,7 @@ pub fn get(self: *Table, key: *ObjectString) ?Value {
     if (self.count == 0) {
         return null;
     }
-    const entry = self.findEntry(key);
+    const entry = findEntry(self.entries, self.capacity, key);
     return if (entry.key != null) entry.value else null;
 }
 
@@ -66,22 +66,23 @@ pub fn delete(self: *Table, key: *ObjectString) bool {
     if (self.count == 0) {
         return false;
     }
-    const entry = self.findEntry(key);
+    const entry = findEntry(self.entries, self.capacity, key);
     if (entry.key == null) {
         return false;
     }
+    // Placing a tombstone in the entry to mark it as deleted.
     entry.key = null;
-    entry.value = Value{ .VAL_NULL = undefined };
+    entry.value = Value{ .VAL_BOOL = true };
     return true;
 }
 
 /// Looks up the given key in the table.
 /// Returns either the entry associated with the key or the first empty entry.
-fn findEntry(self: *Table, key: *ObjectString) *Entry {
-    var index = @mod(key.hash, self.capacity);
+fn findEntry(entries: []Entry, capacity: usize, key: *ObjectString) *Entry {
+    var index = @mod(key.hash, capacity);
     var tombstone: ?*Entry = null;
     while (true) {
-        var entry: *Entry = &self.entries[index];
+        var entry: *Entry = &entries[index];
         if (entry.key) |entry_key| {
             if (entry_key.chars.len == key.chars.len and entry_key.hash == key.hash and std.mem.eql(u8, entry_key.chars, key.chars)) {
                 return entry;
@@ -96,7 +97,7 @@ fn findEntry(self: *Table, key: *ObjectString) *Entry {
                 },
             }
         }
-        index = @mod((index + 1), self.capacity);
+        index = @mod((index + 1), capacity);
     }
 }
 
@@ -130,6 +131,7 @@ fn adjustCapacity(self: *Table, new_capacity: usize) !void {
     self.count = 0;
     var new_entries = try self.allocator.alloc(Entry, new_capacity);
     var start_index: usize = 0;
+    // Initializing the new entries.
     while (start_index < new_capacity) {
         new_entries[start_index] = Entry{ .key = null, .value = Value{ .VAL_NULL = undefined } };
         start_index += 1;
@@ -138,7 +140,7 @@ fn adjustCapacity(self: *Table, new_capacity: usize) !void {
         // Copy the entries from the old table to the new table.
         for (self.entries) |entry| {
             if (entry.key) |entry_key| {
-                const new_entry = self.findEntry(entry_key);
+                const new_entry = findEntry(new_entries, new_capacity, entry_key);
                 new_entry.key = entry_key;
                 new_entry.value = entry.value;
                 self.count += 1;
@@ -156,13 +158,34 @@ fn growCapacy(self: *Table) usize {
     return if (@intToFloat(f64, self.capacity) * table_growth_factor > table_init_capacity) self.capacity * 2 else table_init_capacity;
 }
 
-test "Can find entries" {
+test "Can get entries" {
     var table = Table.init(std.heap.page_allocator);
     defer table.deinit();
     var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
     var value = Value{ .VAL_NUMBER = 1234.0 };
-    try std.testing.expect(try table.set(&key, value));
-    var entry = table.findEntry(&key);
-    try std.testing.expect(entry.key != null);
-    try std.testing.expect(entry.value.isEqual(value));
+    _ = try table.set(&key, value);
+    var returned_value = table.get(&key);
+    try std.testing.expectEqual(value, returned_value.?);
+}
+
+test "Can remove Entry" {
+    var table = Table.init(std.heap.page_allocator);
+    defer table.deinit();
+    var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
+    var value = Value{ .VAL_NUMBER = 1234.0 };
+    _ = try table.set(&key, value);
+    _ = table.delete(&key);
+    var returned_value = table.get(&key);
+    try std.testing.expect(null == returned_value);
+}
+
+test "Can find entry after adjusting capacity" {
+    var table = Table.init(std.heap.page_allocator);
+    defer table.deinit();
+    var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
+    var value = Value{ .VAL_NUMBER = 1234.0 };
+    _ = try table.set(&key, value);
+    try table.adjustCapacity(@floatToInt(usize, @intToFloat(f64, table.capacity) * table_growth_factor));
+    var returned_value = table.get(&key);
+    try std.testing.expectEqual(value, returned_value.?);
 }
