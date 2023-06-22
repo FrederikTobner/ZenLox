@@ -39,6 +39,7 @@ pub fn build(b: *std.build.Builder) void {
 
     // Adding a custom step to run the tests
     const exe_tests = b.addTest("test.zig");
+    exe_tests.addOptions("debug_options", debug_options);
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
     const test_step = b.step("test", "Run unit tests");

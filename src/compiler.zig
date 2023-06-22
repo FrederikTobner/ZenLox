@@ -17,11 +17,25 @@ compiling_chunk: *Chunk = undefined,
 print_bytecode: bool = @import("debug_options").printBytecode,
 memory_mutator: *MemoryMutator = undefined,
 rules: std.EnumArray(TokenType, ParseRule),
+compiler_contex: CompilerContex = undefined,
+const CompilerContex = struct {
+    locals: [256]Local = undefined,
+    local_count: u8 = 0,
+    scope_depth: u8 = 0,
+    pub fn init() CompilerContex {
+        return CompilerContex{};
+    }
+};
 const Parser = struct {
     current: Token = undefined,
     previous: Token = undefined,
     had_error: bool = false,
     panic_mode: bool = false,
+};
+
+const Local = struct {
+    name: Token = undefined,
+    depth: u8 = 0,
 };
 
 const Precedence = enum {
@@ -70,6 +84,7 @@ pub fn init(memory_mutator: *MemoryMutator) Compiler {
         .lexer = undefined,
         .memory_mutator = memory_mutator,
         .rules = rules,
+        .compiler_contex = CompilerContex.init(),
     };
 }
 
@@ -111,11 +126,54 @@ fn varDeclaration(self: *Compiler) !void {
 
 fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
     self.consume(.TOKEN_IDENTIFIER, error_message);
+    try self.declareVariable();
+    if (self.compiler_contex.scope_depth > 0) {
+        return 0;
+    }
     return try self.identifierConstant(self.parser.previous);
 }
 
 fn defineVariable(self: *Compiler, global: u24) !void {
+    if (self.compiler_contex.scope_depth > 0) {
+        return;
+    }
     try self.emitIndexOpcode(global, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG);
+}
+
+fn declareVariable(self: *Compiler) !void {
+    if (self.compiler_contex.scope_depth == 0) {
+        return;
+    }
+    var counter = self.compiler_contex.local_count;
+    while (counter > 0) {
+        counter -= 1;
+        var local: Local = self.compiler_contex.locals[counter];
+        if (local.depth != -1 and local.depth < self.compiler_contex.scope_depth) {
+            break;
+        }
+        if (identifiersEqual(self.parser.previous.start[0..self.parser.previous.length], local.name.start[0..local.name.length])) {
+            self.emitError("Already variable with this name in this scope.");
+        }
+    }
+    const name: Token = self.parser.previous;
+    try self.addLocal(name);
+}
+
+fn identifiersEqual(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) {
+        return false;
+    }
+    return std.mem.eql(u8, a, b);
+}
+
+fn addLocal(self: *Compiler, name: Token) !void {
+    if (self.compiler_contex.local_count == std.math.maxInt(u8)) {
+        self.emitError("Too many local variables in function.");
+        return;
+    }
+    const local: Local = Local{ .name = name, .depth = self.compiler_contex.scope_depth };
+    self.compiler_contex.locals[self.compiler_contex.local_count] = local;
+    self.compiler_contex.local_count += 1;
 }
 
 fn identifierConstant(self: *Compiler, name: Token) !u24 {
@@ -125,6 +183,10 @@ fn identifierConstant(self: *Compiler, name: Token) !u24 {
 fn statement(self: *Compiler) !void {
     if (self.match(.TOKEN_PRINT)) {
         try self.printStatement();
+    } else if (self.match(.TOKEN_LEFT_BRACE)) {
+        self.beginScope();
+        try self.block();
+        try self.endScope();
     } else {
         try self.expressionStatement();
     }
@@ -147,13 +209,64 @@ fn variable(self: *Compiler, can_assign: bool) !void {
 }
 
 fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
-    const arg = try self.identifierConstant(name);
+    var local: bool = true;
+    var arg = try self.resolveLocal(name);
+    if (arg == -1) {
+        arg = try self.identifierConstant(name);
+        local = false;
+    }
     if (can_assign and self.match(.TOKEN_EQUAL)) {
         try self.expression();
-        try self.emitIndexOpcode(arg, .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
+        if (local) {
+            try self.emitOpcode(OpCode.OP_SET_LOCAL);
+            try self.emitByte(@intCast(u8, arg));
+        } else {
+            try self.emitIndexOpcode(@intCast(usize, arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
+        }
+        try self.emitIndexOpcode(@intCast(usize, arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
     } else {
-        try self.emitIndexOpcode(arg, .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG);
+        if (local) {
+            try self.emitOpcode(OpCode.OP_GET_LOCAL);
+            try self.emitByte(@intCast(u8, arg));
+        } else {
+            try self.emitIndexOpcode(@intCast(usize, arg), .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG);
+        }
     }
+}
+
+fn resolveLocal(self: *Compiler, name: Token) !i64 {
+    var counter = self.compiler_contex.local_count;
+    while (counter > 0) {
+        counter -= 1;
+        var local: Local = self.compiler_contex.locals[counter];
+        if (identifiersEqual(name.start[0..name.length], local.name.start[0..local.name.length])) {
+            return counter;
+        }
+    }
+    return -1;
+}
+
+fn block(self: *Compiler) std.mem.Allocator.Error!void {
+    while (!self.check(.TOKEN_RIGHT_BRACE) and !self.check(.TOKEN_EOF)) {
+        try self.declaration();
+    }
+    self.consume(.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
+fn beginScope(self: *Compiler) void {
+    self.compiler_contex.scope_depth += 1;
+}
+
+fn endScope(self: *Compiler) !void {
+    self.compiler_contex.scope_depth -= 1;
+    while (self.compiler_contex.local_count > 0 and self.compiler_contex.locals[self.compiler_contex.local_count - 1].depth > self.compiler_contex.scope_depth) {
+        try self.emitOpcode(OpCode.OP_POP);
+        self.compiler_contex.local_count -= 1;
+    }
+}
+
+fn check(self: *Compiler, token_type: TokenType) bool {
+    return self.parser.current.token_type == token_type;
 }
 
 fn synchronize(self: *Compiler) void {

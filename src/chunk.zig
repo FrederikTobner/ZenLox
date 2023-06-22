@@ -30,6 +30,8 @@ pub const OpCode = enum(u8) {
     OP_GET_GLOBAL_LONG,
     OP_SET_GLOBAL,
     OP_SET_GLOBAL_LONG,
+    OP_GET_LOCAL,
+    OP_SET_LOCAL,
 };
 
 const Chunk = @This();
@@ -119,6 +121,8 @@ pub fn disassembleInstruction(self: *Chunk, offset: *u32) void {
         .OP_GET_GLOBAL_LONG => self.longConstantInstruction("OP_GET_GLOBAL_LONG", offset),
         .OP_SET_GLOBAL => self.constantInstruction("OP_SET_GLOBAL", offset),
         .OP_SET_GLOBAL_LONG => self.longConstantInstruction("OP_SET_GLOBAL_LONG", offset),
+        .OP_GET_LOCAL => self.constantInstruction("OP_GET_LOCAL", offset),
+        .OP_SET_LOCAL => self.constantInstruction("OP_SET_LOCAL", offset),
     }
     offset.* += 1;
 }

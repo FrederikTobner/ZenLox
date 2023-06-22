@@ -8,8 +8,7 @@ const ObjectString = @import("object.zig").ObjectString;
 const ObjectType = @import("object.zig").ObjectType;
 const MemoryMutator = @import("memory_mutator.zig");
 
-pub const InterpretResult = enum {
-    OK,
+pub const InterpreterError = error{
     COMPILE_ERROR,
     RUNTIME_ERROR,
 };
@@ -46,7 +45,7 @@ const ValueStack = struct {
         return self.stack[self.stack_top_index - 1 - distance];
     }
 };
-
+const tests = true;
 const VirtualMachine = @This();
 chunk: Chunk,
 instruction_index: u32 = 0,
@@ -71,12 +70,12 @@ pub fn deinit(self: *VirtualMachine) void {
     self.chunk.deinit();
 }
 
-pub fn interpret(self: *VirtualMachine, source: []u8) !InterpretResult {
+pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
     var compiler = Compiler.init(&self.memory_mutator);
     if (try compiler.compile(source, &self.chunk)) {
-        return try self.run();
+        try self.run();
     } else {
-        return InterpretResult.COMPILE_ERROR;
+        return InterpreterError.COMPILE_ERROR;
     }
 }
 
@@ -113,7 +112,7 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
         }
     }
 }
-fn run(self: *VirtualMachine) !InterpretResult {
+fn run(self: *VirtualMachine) !void {
     while (self.instruction_index < self.chunk.byte_code.items.len) : (self.instruction_index += 1) {
         if (self.trace_execution) {
             var index_copy = self.instruction_index;
@@ -140,7 +139,7 @@ fn run(self: *VirtualMachine) !InterpretResult {
             },
             .OP_RETURN => {
                 self.instruction_index += 1;
-                return InterpretResult.OK;
+                return;
             },
             .OP_NEGATE => self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
             .OP_ADD => try self.binaryOperation(.OP_ADD),
@@ -187,7 +186,7 @@ fn run(self: *VirtualMachine) !InterpretResult {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpretResult.RUNTIME_ERROR;
+                    return InterpreterError.RUNTIME_ERROR;
                 }
             },
             .OP_GET_GLOBAL_LONG => {
@@ -203,7 +202,7 @@ fn run(self: *VirtualMachine) !InterpretResult {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpretResult.RUNTIME_ERROR;
+                    return InterpreterError.RUNTIME_ERROR;
                 }
             },
             .OP_SET_GLOBAL => {
@@ -215,7 +214,7 @@ fn run(self: *VirtualMachine) !InterpretResult {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpretResult.RUNTIME_ERROR;
+                    return InterpreterError.RUNTIME_ERROR;
                 }
             },
             .OP_SET_GLOBAL_LONG => {
@@ -230,12 +229,22 @@ fn run(self: *VirtualMachine) !InterpretResult {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpretResult.RUNTIME_ERROR;
+                    return InterpreterError.RUNTIME_ERROR;
                 }
+            },
+            .OP_GET_LOCAL => {
+                self.instruction_index += 1;
+                var slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
+                self.values.push(self.values.peek(slot));
+            },
+            .OP_SET_LOCAL => {
+                self.instruction_index += 1;
+                var slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
+                self.values.stack[slot] = self.values.peek(0);
             },
         }
     }
-    return InterpretResult.OK;
+    return;
 }
 
 fn readString(self: *VirtualMachine) *ObjectString {
