@@ -9,8 +9,8 @@ const ObjectType = @import("object.zig").ObjectType;
 const MemoryMutator = @import("memory_mutator.zig");
 
 pub const InterpreterError = error{
-    COMPILE_ERROR,
-    RUNTIME_ERROR,
+    Compile_Error,
+    Runtime_Error,
 };
 const STACK_MAX: u9 = 256;
 const ValueStack = struct {
@@ -75,7 +75,7 @@ pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
     if (try compiler.compile(source, &self.chunk)) {
         try self.run();
     } else {
-        return InterpreterError.COMPILE_ERROR;
+        return InterpreterError.Compile_Error;
     }
 }
 
@@ -186,7 +186,7 @@ fn run(self: *VirtualMachine) !void {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpreterError.RUNTIME_ERROR;
+                    return InterpreterError.Runtime_Error;
                 }
             },
             .OP_GET_GLOBAL_LONG => {
@@ -202,7 +202,7 @@ fn run(self: *VirtualMachine) !void {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpreterError.RUNTIME_ERROR;
+                    return InterpreterError.Runtime_Error;
                 }
             },
             .OP_SET_GLOBAL => {
@@ -214,7 +214,7 @@ fn run(self: *VirtualMachine) !void {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpreterError.RUNTIME_ERROR;
+                    return InterpreterError.Runtime_Error;
                 }
             },
             .OP_SET_GLOBAL_LONG => {
@@ -229,7 +229,7 @@ fn run(self: *VirtualMachine) !void {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
                     std.debug.print("'.\n", .{});
-                    return InterpreterError.RUNTIME_ERROR;
+                    return InterpreterError.Runtime_Error;
                 }
             },
             .OP_GET_LOCAL => {
