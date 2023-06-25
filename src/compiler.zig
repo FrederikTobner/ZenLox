@@ -9,6 +9,7 @@ const Value = @import("value.zig").Value;
 const Object = @import("object.zig").Object;
 const ObjectString = @import("object.zig").ObjectString;
 const MemoryMutator = @import("memory_mutator.zig");
+const Disassembler = @import("disassembler.zig");
 
 const Compiler = @This();
 parser: Parser,
@@ -97,7 +98,7 @@ pub fn compile(self: *Compiler, source: []const u8, chunk: *Chunk) !bool {
     }
     try self.endCompiler();
     if (self.print_bytecode) {
-        self.getCompilingChunk().disassemble();
+        Disassembler.disassemble(self.getCompilingChunk());
     }
     return !self.parser.had_error;
 }
@@ -183,6 +184,8 @@ fn identifierConstant(self: *Compiler, name: Token) !u24 {
 fn statement(self: *Compiler) !void {
     if (self.match(.TOKEN_PRINT)) {
         try self.printStatement();
+    } else if (self.match(.TOKEN_IF)) {
+        try self.ifStatement();
     } else if (self.match(.TOKEN_LEFT_BRACE)) {
         self.beginScope();
         try self.block();
@@ -196,6 +199,42 @@ fn printStatement(self: *Compiler) !void {
     try self.expression();
     self.consume(.TOKEN_SEMICOLON, "Expect ';' after value.");
     try self.emitOpcode(OpCode.OP_PRINT);
+}
+
+fn ifStatement(self: *Compiler) std.mem.Allocator.Error!void {
+    self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'if'.");
+    try self.expression();
+    self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after condition.");
+    const then_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+    try self.emitOpcode(.OP_POP);
+    try self.statement();
+    const else_jump: u16 = try self.emitJump(OpCode.OP_JUMP);
+    try self.patchJump(then_jump);
+    try self.emitOpcode(.OP_POP);
+    if (self.match(.TOKEN_ELSE)) {
+        try self.statement();
+        try self.patchJump(else_jump);
+    }
+}
+
+fn emitJump(self: *Compiler, opcode: OpCode) !u16 {
+    try self.emitOpcode(opcode);
+    try self.emitByte(0xff);
+    try self.emitByte(0xff);
+    return @intCast(u16, self.getCompilingChunk().byte_code.items.len - 2);
+}
+
+fn patchJump(self: *Compiler, offset: u16) !void {
+    const jump: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len - offset - 2);
+    if (jump > std.math.maxInt(u16)) {
+        self.emitError("Too much code to jump over.");
+    }
+    const jump_bytes = [_]u8{ @intCast(u8, (jump >> 8)), @intCast(u8, jump & 0xff) };
+    try self.getCompilingChunk().byte_code.replaceRange(
+        offset,
+        2,
+        jump_bytes[0..jump_bytes.len],
+    );
 }
 
 fn expressionStatement(self: *Compiler) !void {

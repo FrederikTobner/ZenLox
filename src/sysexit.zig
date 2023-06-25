@@ -1,4 +1,4 @@
-pub const SysExits = enum(u8) {
+pub const SysExits = enum(u7) {
     // successful termination
     EX_OK = 0,
     // command line usage error

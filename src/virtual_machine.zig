@@ -7,6 +7,7 @@ const Object = @import("object.zig").Object;
 const ObjectString = @import("object.zig").ObjectString;
 const ObjectType = @import("object.zig").ObjectType;
 const MemoryMutator = @import("memory_mutator.zig");
+const Disassembler = @import("disassembler.zig");
 
 pub const InterpreterError = error{
     Compile_Error,
@@ -26,16 +27,15 @@ const ValueStack = struct {
         }
     }
     // Pushes a value onto the stack.
-    fn push(self: *ValueStack, value: Value) void {
+    fn push(self: *ValueStack, value: Value) !void {
         if (self.stack_top_index >= STACK_MAX) {
-            // Maybe return an error here instead of panicking?
-            std.debug.panic("Stack overflow.", .{});
+            return InterpreterError.Runtime_Error;
         }
         self.stack[self.stack_top_index] = value;
         self.stack_top_index += 1;
     }
 
-    // Pops a value off the stack.
+    // Pops a value from the stack.
     fn pop(self: *ValueStack) Value {
         self.stack_top_index -= 1;
         return self.stack[self.stack_top_index];
@@ -84,26 +84,26 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
     var a: Value = self.values.pop();
     if (a.isNumber() and b.isNumber()) {
         switch (op) {
-            .OP_ADD => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER + b.VAL_NUMBER }),
-            .OP_SUBTRACT => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER - b.VAL_NUMBER }),
-            .OP_MULTIPLY => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER * b.VAL_NUMBER }),
-            .OP_DIVIDE => self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER / b.VAL_NUMBER }),
-            .OP_GREATER => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER > b.VAL_NUMBER }),
-            .OP_LESS => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER < b.VAL_NUMBER }),
-            .OP_GREATER_EQUAL => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER >= b.VAL_NUMBER }),
-            .OP_LESS_EQUAL => self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER <= b.VAL_NUMBER }),
+            .OP_ADD => try self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER + b.VAL_NUMBER }),
+            .OP_SUBTRACT => try self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER - b.VAL_NUMBER }),
+            .OP_MULTIPLY => try self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER * b.VAL_NUMBER }),
+            .OP_DIVIDE => try self.values.push(Value{ .VAL_NUMBER = a.VAL_NUMBER / b.VAL_NUMBER }),
+            .OP_GREATER => try self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER > b.VAL_NUMBER }),
+            .OP_LESS => try self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER < b.VAL_NUMBER }),
+            .OP_GREATER_EQUAL => try self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER >= b.VAL_NUMBER }),
+            .OP_LESS_EQUAL => try self.values.push(Value{ .VAL_BOOL = a.VAL_NUMBER <= b.VAL_NUMBER }),
             else => unreachable,
         }
     } else {
         switch (op) {
-            .OP_EQUAL => self.values.push(Value{ .VAL_BOOL = a.isEqual(b) }),
-            .OP_NOT_EQUAL => self.values.push(Value{ .VAL_BOOL = !a.isEqual(b) }),
+            .OP_EQUAL => try self.values.push(Value{ .VAL_BOOL = a.isEqual(b) }),
+            .OP_NOT_EQUAL => try self.values.push(Value{ .VAL_BOOL = !a.isEqual(b) }),
             .OP_ADD => {
                 if (a.isObject() and b.isObject() and a.VAL_OBJECT.object_type == ObjectType.OBJ_STRING and b.VAL_OBJECT.object_type == ObjectType.OBJ_STRING) {
                     var a_string = a.VAL_OBJECT.as(ObjectString);
                     var b_string = b.VAL_OBJECT.as(ObjectString);
                     var new_string = try self.memory_mutator.concatenateStringObjects(a_string, b_string);
-                    self.values.push(new_string);
+                    try self.values.push(new_string);
                 } else {
                     std.debug.print("Operands must be two numbers or two strings.", .{});
                 }
@@ -116,7 +116,7 @@ fn run(self: *VirtualMachine) !void {
     while (self.instruction_index < self.chunk.byte_code.items.len) : (self.instruction_index += 1) {
         if (self.trace_execution) {
             var index_copy = self.instruction_index;
-            self.chunk.disassembleInstruction(&index_copy);
+            Disassembler.disassembleInstruction(&self.chunk, &index_copy);
             try self.writer.print("stack: ", .{});
             for (self.values.stack) |value| {
                 try self.writer.print("[", .{});
@@ -128,28 +128,26 @@ fn run(self: *VirtualMachine) !void {
         switch (@intToEnum(OpCode, self.chunk.byte_code.items[self.instruction_index])) {
             .OP_CONSTANT => {
                 self.instruction_index += 1;
-                self.values.push(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]]);
+                try self.values.push(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]]);
             },
             .OP_CONSTANT_LONG => {
-                var constant_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
-                constant_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
-                constant_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                var constant_index: u24 = self.readShortWord();
                 self.instruction_index += 3;
-                self.values.push(self.chunk.values.items[constant_index]);
+                try self.values.push(self.chunk.values.items[constant_index]);
             },
             .OP_RETURN => {
                 self.instruction_index += 1;
                 return;
             },
-            .OP_NEGATE => self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
+            .OP_NEGATE => try self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
             .OP_ADD => try self.binaryOperation(.OP_ADD),
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
             .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
             .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
-            .OP_NULL => self.values.push(Value{ .VAL_NULL = undefined }),
-            .OP_TRUE => self.values.push(Value{ .VAL_BOOL = true }),
-            .OP_FALSE => self.values.push(Value{ .VAL_BOOL = false }),
-            .OP_NOT => self.values.push(Value{ .VAL_BOOL = self.values.pop().isFalsey() }),
+            .OP_NULL => try self.values.push(Value{ .VAL_NULL = undefined }),
+            .OP_TRUE => try self.values.push(Value{ .VAL_BOOL = true }),
+            .OP_FALSE => try self.values.push(Value{ .VAL_BOOL = false }),
+            .OP_NOT => try self.values.push(Value{ .VAL_BOOL = self.values.pop().isFalsey() }),
             .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
             .OP_GREATER => try self.binaryOperation(.OP_GREATER),
             .OP_LESS => try self.binaryOperation(.OP_LESS),
@@ -168,9 +166,7 @@ fn run(self: *VirtualMachine) !void {
                 _ = self.values.pop();
             },
             .OP_DEFINE_GLOBAL_LONG => {
-                var name_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
-                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
-                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                var name_index: u24 = self.readShortWord();
                 self.instruction_index += 3;
                 var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
                 _ = try self.memory_mutator.globals.set(name, self.values.peek(0));
@@ -181,7 +177,7 @@ fn run(self: *VirtualMachine) !void {
                 var name = self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].VAL_OBJECT.as(ObjectString);
                 var value = self.memory_mutator.globals.get(name);
                 if (value) |val| {
-                    self.values.push(val);
+                    try self.values.push(val);
                 } else {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
@@ -190,14 +186,12 @@ fn run(self: *VirtualMachine) !void {
                 }
             },
             .OP_GET_GLOBAL_LONG => {
-                var name_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
-                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
-                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                var name_index: u24 = self.readShortWord();
                 self.instruction_index += 3;
                 var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
                 var value = self.memory_mutator.globals.get(name);
                 if (value) |val| {
-                    self.values.push(val);
+                    try self.values.push(val);
                 } else {
                     std.debug.print("Undefined variable '", .{});
                     try name.print(self.writer);
@@ -218,9 +212,7 @@ fn run(self: *VirtualMachine) !void {
                 }
             },
             .OP_SET_GLOBAL_LONG => {
-                var name_index: u24 = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
-                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
-                name_index |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+                var name_index = self.readShortWord();
                 self.instruction_index += 3;
                 var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
                 var value = self.values.peek(0);
@@ -235,12 +227,24 @@ fn run(self: *VirtualMachine) !void {
             .OP_GET_LOCAL => {
                 self.instruction_index += 1;
                 var slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
-                self.values.push(self.values.peek(slot));
+                try self.values.push(self.values.peek(slot));
             },
             .OP_SET_LOCAL => {
                 self.instruction_index += 1;
                 var slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
                 self.values.stack[slot] = self.values.peek(0);
+            },
+            .OP_JUMP_IF_FALSE => {
+                var offset = self.readShort();
+                self.instruction_index += 1;
+                if (self.values.peek(0).isFalsey()) {
+                    self.instruction_index += offset;
+                }
+            },
+            .OP_JUMP => {
+                var offset = self.readShort();
+                self.instruction_index += 1;
+                self.instruction_index += offset;
             },
         }
     }
@@ -249,4 +253,19 @@ fn run(self: *VirtualMachine) !void {
 
 fn readString(self: *VirtualMachine) *ObjectString {
     return self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].as(ObjectString);
+}
+
+fn readShort(self: *VirtualMachine) u16 {
+    var short = @intCast(u16, self.chunk.byte_code.items[self.instruction_index + 1]) << 8;
+    short |= @intCast(u16, self.chunk.byte_code.items[self.instruction_index + 2]);
+    self.instruction_index += 2;
+    return short;
+}
+
+fn readShortWord(self: *VirtualMachine) u24 {
+    var short_word = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
+    short_word |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
+    short_word |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 3]);
+    self.instruction_index += 3;
+    return short_word;
 }
