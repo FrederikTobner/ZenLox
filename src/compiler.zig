@@ -80,6 +80,7 @@ pub fn init(memory_mutator: *MemoryMutator) Compiler {
     rules.set(.TOKEN_LESS_EQUAL, ParseRule{ .infix = binary, .precedence = .PREC_COMPARISON });
     rules.set(.TOKEN_STRING, ParseRule{ .prefix = string });
     rules.set(.TOKEN_IDENTIFIER, ParseRule{ .prefix = variable });
+    rules.set(.TOKEN_AND, ParseRule{ .infix = andExpression, .precedence = .PREC_AND });
     return Compiler{
         .parser = Parser{},
         .lexer = undefined,
@@ -186,6 +187,10 @@ fn statement(self: *Compiler) !void {
         try self.printStatement();
     } else if (self.match(.TOKEN_IF)) {
         try self.ifStatement();
+    } else if (self.match(.TOKEN_WHILE)) {
+        try self.whileStatement();
+    } else if (self.match(.TOKEN_FOR)) {
+        try self.forStatement();
     } else if (self.match(.TOKEN_LEFT_BRACE)) {
         self.beginScope();
         try self.block();
@@ -215,6 +220,67 @@ fn ifStatement(self: *Compiler) std.mem.Allocator.Error!void {
         try self.statement();
         try self.patchJump(else_jump);
     }
+}
+
+fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
+    self.beginScope();
+    self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'for'.");
+    if (self.match(.TOKEN_SEMICOLON)) {
+        // No initializer.
+    } else if (self.match(.TOKEN_VAR)) {
+        try self.varDeclaration();
+    } else {
+        try self.expressionStatement();
+    }
+    var loop_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
+    var exit_jump: i17 = -1;
+    if (!self.match(.TOKEN_SEMICOLON)) {
+        try self.expression();
+        self.consume(.TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+        exit_jump = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+        try self.emitOpcode(.OP_POP);
+    }
+    if (!self.match(.TOKEN_RIGHT_PARENTHESIZE)) {
+        const body_jump: u16 = try self.emitJump(OpCode.OP_JUMP);
+        const increment_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
+        try self.expression();
+        try self.emitOpcode(.OP_POP);
+        self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after for clauses.");
+        try self.emitLoop(loop_start);
+        loop_start = increment_start;
+        try self.patchJump(body_jump);
+    }
+    try self.statement();
+    try self.emitLoop(loop_start);
+    if (exit_jump != -1) {
+        try self.patchJump(@intCast(u16, exit_jump));
+        try self.emitOpcode(.OP_POP);
+    }
+    try self.endScope();
+}
+
+fn whileStatement(self: *Compiler) std.mem.Allocator.Error!void {
+    const loop_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
+    self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'while'.");
+    try self.expression();
+    self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after condition.");
+    const exit_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+    try self.emitOpcode(.OP_POP);
+    try self.statement();
+    try self.emitLoop(loop_start);
+    try self.patchJump(exit_jump);
+    try self.emitOpcode(.OP_POP);
+}
+
+fn emitLoop(self: *Compiler, loop_start: u16) !void {
+    try self.emitOpcode(.OP_LOOP);
+    const calculated_offset: usize = self.getCompilingChunk().byte_code.items.len - @intCast(usize, loop_start) + 2;
+    if (calculated_offset > std.math.maxInt(u16)) {
+        self.emitError("Loop body too large.");
+    }
+    const offset = @intCast(u16, calculated_offset);
+    const offset_bytes = [_]u8{ @intCast(u8, (offset >> 8)), @intCast(u8, offset & 0xff) };
+    try self.emitBytes(offset_bytes[0..2]);
 }
 
 fn emitJump(self: *Compiler, opcode: OpCode) !u16 {
@@ -262,7 +328,6 @@ fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
         } else {
             try self.emitIndexOpcode(@intCast(usize, arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
         }
-        try self.emitIndexOpcode(@intCast(usize, arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
     } else {
         if (local) {
             try self.emitOpcode(OpCode.OP_GET_LOCAL);
@@ -290,6 +355,24 @@ fn block(self: *Compiler) std.mem.Allocator.Error!void {
         try self.declaration();
     }
     self.consume(.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
+fn andExpression(self: *Compiler, can_assign: bool) !void {
+    _ = can_assign;
+    const end_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+    try self.emitOpcode(OpCode.OP_POP);
+    try self.parsePrecedence(Precedence.PREC_AND);
+    try self.patchJump(end_jump);
+}
+
+fn orExpression(self: *Compiler, can_assign: bool) !void {
+    _ = can_assign;
+    const else_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+    const end_jump: u16 = try self.emitJump(OpCode.OP_JUMP);
+    try self.patchJump(else_jump);
+    try self.emitOpcode(OpCode.OP_POP);
+    try self.parsePrecedence(Precedence.PREC_OR);
+    try self.patchJump(end_jump);
 }
 
 fn beginScope(self: *Compiler) void {

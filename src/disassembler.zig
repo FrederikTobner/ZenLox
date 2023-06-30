@@ -15,12 +15,12 @@ pub fn disassemble(chunk: *Chunk) void {
 // Disassembles a single instruction in the chunk
 pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
     switch (@intToEnum(OpCode, chunk.byte_code.items[offset.*])) {
-        .OP_RETURN => simpleInstruction("OP_RETURN\n"),
+        .OP_RETURN => simpleInstruction("OP_RETURN"),
         .OP_CONSTANT => constantInstruction(chunk, "OP_CONSTANT", offset),
         .OP_CONSTANT_LONG => longConstantInstruction(chunk, "OP_CONSTANT_LONG", offset),
-        .OP_NEGATE => simpleInstruction("OP_NEGATE\n"),
-        .OP_ADD => simpleInstruction("OP_ADD\n"),
-        .OP_SUBTRACT => simpleInstruction("OP_SUBTRACT\n"),
+        .OP_NEGATE => simpleInstruction("OP_NEGATE"),
+        .OP_ADD => simpleInstruction("OP_ADD"),
+        .OP_SUBTRACT => simpleInstruction("OP_SUBTRACT"),
         .OP_MULTIPLY => simpleInstruction("OP_MULTIPLY"),
         .OP_DIVIDE => simpleInstruction("OP_DIVIDE"),
         .OP_NULL => simpleInstruction("OP_NULL"),
@@ -43,8 +43,9 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
         .OP_SET_GLOBAL_LONG => longConstantInstruction(chunk, "OP_SET_GLOBAL_LONG", offset),
         .OP_GET_LOCAL => constantInstruction(chunk, "OP_GET_LOCAL", offset),
         .OP_SET_LOCAL => constantInstruction(chunk, "OP_SET_LOCAL", offset),
-        .OP_JUMP_IF_FALSE => constantInstruction(chunk, "OP_JUMP_IF_FALSE", offset),
-        .OP_JUMP => constantInstruction(chunk, "OP_JUMP", offset),
+        .OP_JUMP_IF_FALSE => jumpInstruction(chunk, "OP_JUMP_IF_FALSE", 1, offset),
+        .OP_JUMP => jumpInstruction(chunk, "OP_JUMP", 1, offset),
+        .OP_LOOP => jumpInstruction(chunk, "OP_LOOP", -1, offset),
     }
     offset.* += 1;
 }
@@ -57,7 +58,7 @@ fn constantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
     var constantIndex: u8 = chunk.byte_code.items[offset.* + 1];
     std.debug.print("{s} {d} '", .{ name, constantIndex });
     chunk.values.items[constantIndex].printDebug();
-    std.debug.print("\n", .{});
+    std.debug.print("'\n", .{});
     offset.* += 1;
 }
 
@@ -67,13 +68,13 @@ fn longConstantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
     constantIndex |= @intCast(u24, chunk.byte_code.items[offset.* + 3]);
     std.debug.print("{s} {d} '", .{ name, constantIndex });
     chunk.values.items[constantIndex].printDebug();
-    std.debug.print("\n", .{});
+    std.debug.print("'\n", .{});
     offset.* += 3;
 }
 
 fn jumpInstruction(chunk: *Chunk, name: []const u8, sign: i8, offset: *u32) void {
     var jump: u16 = @intCast(u16, chunk.byte_code.items[offset.* + 1]) << 8;
     jump |= @intCast(u16, chunk.byte_code.items[offset.* + 2]);
-    std.debug.print("{s} {d} -> {d}\n", .{ name, offset.* + 3, offset.* + 3 + sign * jump });
+    std.debug.print("{s} {d} -> {d}\n", .{ name, offset.* + 3, offset.* + 3 + @intCast(i33, sign) * jump });
     offset.* += 2;
 }

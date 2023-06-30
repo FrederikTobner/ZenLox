@@ -34,6 +34,7 @@ pub const OpCode = enum(u8) {
     OP_SET_LOCAL,
     OP_JUMP_IF_FALSE,
     OP_JUMP,
+    OP_LOOP,
 };
 
 const Chunk = @This();

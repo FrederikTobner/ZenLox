@@ -87,9 +87,10 @@ fn handleSingleArg(writer: *const std.fs.File.Writer, allocator: std.mem.Allocat
 
 fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     const stdin = std.io.getStdIn();
+    try std.io.getStdOut().writer().print(">> ", .{});
+    var input = try stdin.reader().readUntilDelimiterAlloc(allocator, '\n', 1024);
+    errdefer allocator.free(input);
     while (true) {
-        try std.io.getStdOut().writer().print(">> ", .{});
-        const input = try stdin.reader().readUntilDelimiterAlloc(allocator, '\n', 1024);
         // No input
         if (input.len == 1) {
             allocator.free(input);
@@ -97,6 +98,8 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
         }
         try run(input, vm);
         allocator.free(input);
+        try std.io.getStdOut().writer().print(">> ", .{});
+        input = try stdin.reader().readUntilDelimiterAlloc(allocator, '\n', 1024);
     }
 }
 

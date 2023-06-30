@@ -105,10 +105,14 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
                     var new_string = try self.memory_mutator.concatenateStringObjects(a_string, b_string);
                     try self.values.push(new_string);
                 } else {
-                    std.debug.print("Operands must be two numbers or two strings.", .{});
+                    std.debug.print("Operands must be two numbers or two strings, but are {s} and {s}.\n", .{ a.getPrintableType(), b.getPrintableType() });
+                    return InterpreterError.Runtime_Error;
                 }
             },
-            else => std.debug.print("Operands must be two numbers.", .{}),
+            else => {
+                std.debug.print("Operands must be two numbers, but are {s} and {s}.\n", .{ a.getPrintableType(), b.getPrintableType() });
+                return InterpreterError.Runtime_Error;
+            },
         }
     }
 }
@@ -118,9 +122,10 @@ fn run(self: *VirtualMachine) !void {
             var index_copy = self.instruction_index;
             Disassembler.disassembleInstruction(&self.chunk, &index_copy);
             try self.writer.print("stack: ", .{});
-            for (self.values.stack) |value| {
+            var counter: u8 = 0;
+            while (counter < self.values.stack_top_index) : (counter += 1) {
                 try self.writer.print("[", .{});
-                try value.print(self.writer);
+                try self.values.stack[counter].print(self.writer);
                 try self.writer.print("]", .{});
             }
             try std.io.getStdOut().writer().print("\n", .{});
@@ -130,11 +135,7 @@ fn run(self: *VirtualMachine) !void {
                 self.instruction_index += 1;
                 try self.values.push(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]]);
             },
-            .OP_CONSTANT_LONG => {
-                var constant_index: u24 = self.readShortWord();
-                self.instruction_index += 3;
-                try self.values.push(self.chunk.values.items[constant_index]);
-            },
+            .OP_CONSTANT_LONG => try self.values.push(self.chunk.values.items[self.readShortWord()]),
             .OP_RETURN => {
                 self.instruction_index += 1;
                 return;
@@ -167,7 +168,6 @@ fn run(self: *VirtualMachine) !void {
             },
             .OP_DEFINE_GLOBAL_LONG => {
                 var name_index: u24 = self.readShortWord();
-                self.instruction_index += 3;
                 var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
                 _ = try self.memory_mutator.globals.set(name, self.values.peek(0));
                 _ = self.values.pop();
@@ -187,7 +187,6 @@ fn run(self: *VirtualMachine) !void {
             },
             .OP_GET_GLOBAL_LONG => {
                 var name_index: u24 = self.readShortWord();
-                self.instruction_index += 3;
                 var name = self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString);
                 var value = self.memory_mutator.globals.get(name);
                 if (value) |val| {
@@ -236,15 +235,17 @@ fn run(self: *VirtualMachine) !void {
             },
             .OP_JUMP_IF_FALSE => {
                 var offset = self.readShort();
-                self.instruction_index += 1;
                 if (self.values.peek(0).isFalsey()) {
                     self.instruction_index += offset;
                 }
             },
             .OP_JUMP => {
                 var offset = self.readShort();
-                self.instruction_index += 1;
                 self.instruction_index += offset;
+            },
+            .OP_LOOP => {
+                var offset = self.readShort();
+                self.instruction_index -= offset;
             },
         }
     }

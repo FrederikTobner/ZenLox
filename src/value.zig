@@ -76,4 +76,13 @@ pub const Value = union(Type) {
             .VAL_OBJECT => self.VAL_OBJECT.printDebug(),
         }
     }
+
+    pub fn getPrintableType(self: Value) []const u8 {
+        switch (self) {
+            .VAL_NULL => return "undefiened",
+            .VAL_BOOL => return "boolean",
+            .VAL_NUMBER => return "number",
+            .VAL_OBJECT => return "object",
+        }
+    }
 };
