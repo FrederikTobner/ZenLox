@@ -66,6 +66,58 @@ test "Division" {
     try std.testing.expectEqual(expectedValue, value.?);
 }
 
+test "Greater" {
+    var virtual_machine = try vmStateTest("var i = 3 > 2; ");
+    defer virtual_machine.deinit();
+    try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
+    const hash = FNV1a.hash("i");
+    const value = virtual_machine.memory_mutator.globals.getWithChars("i", hash);
+    try std.testing.expect(value != null);
+    const expectedValue = Value{
+        .VAL_BOOL = true,
+    };
+    try std.testing.expectEqual(expectedValue, value.?);
+}
+
+test "Greater Equal" {
+    var virtual_machine = try vmStateTest("var i = 3 >= 2; ");
+    defer virtual_machine.deinit();
+    try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
+    const hash = FNV1a.hash("i");
+    const value = virtual_machine.memory_mutator.globals.getWithChars("i", hash);
+    try std.testing.expect(value != null);
+    const expectedValue = Value{
+        .VAL_BOOL = true,
+    };
+    try std.testing.expectEqual(expectedValue, value.?);
+}
+
+test "Less" {
+    var virtual_machine = try vmStateTest("var i = 3 < 2; ");
+    defer virtual_machine.deinit();
+    try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
+    const hash = FNV1a.hash("i");
+    const value = virtual_machine.memory_mutator.globals.getWithChars("i", hash);
+    try std.testing.expect(value != null);
+    const expectedValue = Value{
+        .VAL_BOOL = false,
+    };
+    try std.testing.expectEqual(expectedValue, value.?);
+}
+
+test "Less Equal" {
+    var virtual_machine = try vmStateTest("var i = 3 <= 2; ");
+    defer virtual_machine.deinit();
+    try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
+    const hash = FNV1a.hash("i");
+    const value = virtual_machine.memory_mutator.globals.getWithChars("i", hash);
+    try std.testing.expect(value != null);
+    const expectedValue = Value{
+        .VAL_BOOL = false,
+    };
+    try std.testing.expectEqual(expectedValue, value.?);
+}
+
 test "Can define global" {
     var virtual_machine = try vmStateTest("var i = 5; ");
     defer virtual_machine.deinit();
