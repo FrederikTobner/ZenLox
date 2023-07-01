@@ -19,9 +19,10 @@ test "Can define global" {
     defer virtual_machine.deinit();
     try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
     const hash = FNV1a.hash("i");
-    const value = virtual_machine.memory_mutator.globals.getWithChars("i", hash).?;
+    const value = virtual_machine.memory_mutator.globals.getWithChars("i", hash);
+    try std.testing.expect(value != null);
     const expectedValue = Value{
         .VAL_NUMBER = 5,
     };
-    try std.testing.expectEqual(expectedValue, value);
+    try std.testing.expectEqual(expectedValue, value.?);
 }
