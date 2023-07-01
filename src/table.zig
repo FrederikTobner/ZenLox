@@ -60,6 +60,14 @@ pub fn get(self: *Table, key: *ObjectString) ?Value {
     return if (entry.key != null) entry.value else null;
 }
 
+pub fn getWithChars(self: *Table, chars: []const u8, hash: u64) ?Value {
+    if (self.count == 0) {
+        return null;
+    }
+    const entry = findString(self, chars, hash);
+    return if (entry.key != null) entry.value else null;
+}
+
 /// Deletes the entry associated with the given key.
 /// Returns true if the entry was deleted and false otherwise.
 pub fn delete(self: *Table, key: *ObjectString) bool {
@@ -102,15 +110,16 @@ fn findEntry(entries: []Entry, capacity: usize, key: *ObjectString) *Entry {
 }
 
 /// Looks up the characters
-fn findString(self: *Table, chars: []const u8, hash: u32) ?*Entry {
-    if (self.count == 0) {
-        return null;
-    }
+fn findString(self: *Table, chars: []const u8, hash: u64) *Entry {
     var index = @mod(hash, self.capacity);
     var tombstone: ?*Entry = null;
     while (true) {
         var entry: *Entry = &self.entries[index];
-        if (entry.key == null) {
+        if (entry.key) |entry_key| {
+            if (entry_key.chars.len == chars.len and entry_key.hash == hash and std.mem.eql(u8, entry_key.chars, chars)) {
+                return entry;
+            }
+        } else {
             switch (entry.value) {
                 .VAL_NULL => return tombstone orelse entry,
                 else => {
@@ -119,8 +128,6 @@ fn findString(self: *Table, chars: []const u8, hash: u32) ?*Entry {
                     }
                 },
             }
-        } else if (entry.key.length == chars.len and entry.key.hash == hash and std.mem.eql(u8, entry.key.chars, chars)) {
-            return &entry;
         }
         index = @mod((index + 1), self.capacity);
     }

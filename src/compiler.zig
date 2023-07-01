@@ -59,7 +59,6 @@ const ParseRule = struct {
     precedence: Precedence = Precedence.PREC_NONE,
 };
 
-// Maybe pass in the memory manager here?
 pub fn init(memory_mutator: *MemoryMutator) Compiler {
     var rules = std.EnumArray(TokenType, ParseRule).initFill(ParseRule{});
     rules.set(.TOKEN_LEFT_PARENTHESIZE, ParseRule{ .prefix = grouping, .precedence = .PREC_CALL });
@@ -296,11 +295,7 @@ fn patchJump(self: *Compiler, offset: u16) !void {
         self.emitError("Too much code to jump over.");
     }
     const jump_bytes = [_]u8{ @intCast(u8, (jump >> 8)), @intCast(u8, jump & 0xff) };
-    try self.getCompilingChunk().byte_code.replaceRange(
-        offset,
-        2,
-        jump_bytes[0..jump_bytes.len],
-    );
+    try self.getCompilingChunk().byte_code.replaceRange(offset, 2, jump_bytes[0..jump_bytes.len]);
 }
 
 fn expressionStatement(self: *Compiler) !void {
@@ -606,7 +601,7 @@ fn emitOpcodes(self: *Compiler, op_codes: []const OpCode) !void {
 }
 
 inline fn emitReturn(self: *Compiler) !void {
-    try self.emitByte(@enumToInt(OpCode.OP_RETURN));
+    try self.emitOpcode(.OP_RETURN);
 }
 
 inline fn endCompiler(self: *Compiler) !void {
