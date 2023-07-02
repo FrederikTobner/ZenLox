@@ -2,6 +2,7 @@ const std = @import("std");
 const Token = @import("token.zig");
 const TokenType = @import("token.zig").TokenType;
 
+/// Performs lexical analysis on a source string.
 const Lexer = @This();
 source: []const u8,
 start: [*]const u8,
@@ -14,6 +15,7 @@ pub fn init(source: []const u8) Lexer {
         .current = @ptrCast([*]const u8, source),
     };
 }
+/// Scans the next token in the source string.
 pub fn scanToken(self: *Lexer) Token {
     self.skipWhitespace();
     self.start = self.current;
@@ -61,6 +63,7 @@ pub fn scanToken(self: *Lexer) Token {
     }
 }
 
+/// Skips all whitespace characters.
 fn skipWhitespace(self: *Lexer) void {
     while (true) {
         switch (self.peek()) {
@@ -74,6 +77,7 @@ fn skipWhitespace(self: *Lexer) void {
     }
 }
 
+/// Matches the current character with the expected one.
 fn match(self: *Lexer, expected: u8) bool {
     if (self.isAtEnd()) {
         return false;
@@ -85,15 +89,18 @@ fn match(self: *Lexer, expected: u8) bool {
     return true;
 }
 
+/// Returns the current character without advancing.
 inline fn peek(self: *Lexer) u8 {
     if (self.isAtEnd()) return 0 else return self.current[0];
 }
 
+/// Advances to the next character and returns the previous one.
 fn advance(self: *Lexer) u8 {
     defer self.current += 1;
     return self.current[0];
 }
 
+/// Creates a token with the given type.
 fn makeToken(self: *Lexer, token_type: TokenType) Token {
     return Token{
         .token_type = token_type,
@@ -103,6 +110,7 @@ fn makeToken(self: *Lexer, token_type: TokenType) Token {
     };
 }
 
+/// Creates an error token with the given message.
 fn makeErrorToken(self: *Lexer, message: []const u8) Token {
     return Token{
         .token_type = .TOKEN_ERROR,
@@ -112,21 +120,24 @@ fn makeErrorToken(self: *Lexer, message: []const u8) Token {
     };
 }
 
+/// Determines if the lexer has reached the end of the source string.
 inline fn isAtEnd(self: *Lexer) bool {
     return @ptrToInt(self.current) == @ptrToInt(&self.source[self.source.len - 1]);
 }
 
+/// Determines if the given character is a digit.
 inline fn isDigit(character: u8) bool {
     return character >= '0' and character <= '9';
 }
 
+/// Determines if the given character is an alphabetic character.
 inline fn isAlpha(character: u8) bool {
     return (character >= 'a' and character <= 'z') or
         (character >= 'A' and character <= 'Z') or
         character == '_';
 }
 
-// Why broken :( ?
+/// Creates a string token.
 fn string(self: *Lexer) Token {
     while (self.peek() != '"' and !self.isAtEnd()) : (_ = self.advance()) {
         if (self.peek() == '\n') {
@@ -141,6 +152,7 @@ fn string(self: *Lexer) Token {
     return self.makeToken(TokenType.TOKEN_STRING);
 }
 
+/// Creates an number token.
 fn number(self: *Lexer) Token {
     while (isDigit(self.peek())) {
         _ = self.advance();
@@ -194,6 +206,7 @@ fn identifierType(self: *Lexer) TokenType {
     return .TOKEN_IDENTIFIER;
 }
 
+/// Creates an identifier token.
 fn identifier(self: *Lexer) Token {
     while (isAlpha(self.peek()) or isDigit(self.peek())) {
         _ = self.advance();
@@ -201,11 +214,14 @@ fn identifier(self: *Lexer) Token {
     return self.makeToken(self.identifierType());
 }
 
+/// Checks if the current token is a keyword and returns a token of the given type if it is.
+/// Otherwise, it returns a token of type `TOKEN_IDENTIFIER`.
 inline fn checkKeyword(self: *Lexer, startIndex: usize, rest: []const u8, tokenType: TokenType) TokenType {
     return if (self.distance() == rest.len + startIndex and
         std.mem.eql(u8, rest, self.start[startIndex..self.distance()])) tokenType else TokenType.TOKEN_IDENTIFIER;
 }
 
+/// Calculates the distance between the start of the current token and the start of the source string.
 inline fn distance(self: *Lexer) usize {
     return @ptrToInt(self.current) - @ptrToInt(self.start);
 }

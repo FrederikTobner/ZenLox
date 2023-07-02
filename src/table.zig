@@ -5,20 +5,29 @@ const std = @import("std");
 const ObjectString = @import("object.zig").ObjectString;
 const Value = @import("value.zig").Value;
 
+/// A hash table using linear probing to resolve collisions.
 const Table = @This();
 
+/// The growth factor of the table.
 const table_growth_factor = 2.0;
+/// The maximum load factor of the table.
 const table_max_load_factor = 0.75;
+/// The initial capacity of the table.
 const table_init_capacity = 8;
 
+/// An entry in the table.
 const Entry = struct {
     key: ?*ObjectString = null,
     value: Value = undefined,
 };
 
+/// The capacity of the table.
 capacity: usize = 0,
+/// The number of entries in the table.
 count: usize = 0,
+/// The entries of the table.
 entries: []Entry = undefined,
+/// The allocator used to allocate the entries.
 allocator: std.mem.Allocator = undefined,
 
 /// Initializes the table with the given `allocator`.
@@ -60,6 +69,7 @@ pub fn get(self: *Table, key: *ObjectString) ?Value {
     return if (entry.key != null) entry.value else null;
 }
 
+/// Gets the value associated with the given key.
 pub fn getWithChars(self: *Table, chars: []const u8, hash: u64) ?Value {
     if (self.count == 0) {
         return null;

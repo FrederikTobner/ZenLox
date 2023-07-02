@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// The different types of objects
 pub const ObjectType = enum {
     OBJ_STRING,
 };
@@ -18,8 +19,8 @@ pub const Object = struct {
         if (self.object_type != other.object_type) {
             return false;
         }
-
         switch (self.object_type) {
+            // Strings are uniqued, so we can just compare the pointers
             .OBJ_STRING => return self == other,
         }
     }

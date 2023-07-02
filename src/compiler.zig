@@ -217,8 +217,8 @@ fn ifStatement(self: *Compiler) std.mem.Allocator.Error!void {
     try self.emitOpcode(.OP_POP);
     if (self.match(.TOKEN_ELSE)) {
         try self.statement();
-        try self.patchJump(else_jump);
     }
+    try self.patchJump(else_jump);
 }
 
 fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {

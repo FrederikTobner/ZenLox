@@ -3,5 +3,5 @@ comptime {
     _ = @import("src/token.zig");
     _ = @import("src/fnv1a.zig");
     _ = @import("src/table.zig");
-    _ = @import("src/e2e_tests.zig");
+    _ = @import("src/test/e2e_tests.zig");
 }

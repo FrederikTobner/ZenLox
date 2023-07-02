@@ -75,6 +75,6 @@ fn longConstantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
 fn jumpInstruction(chunk: *Chunk, name: []const u8, sign: i8, offset: *u32) void {
     var jump: u16 = @intCast(u16, chunk.byte_code.items[offset.* + 1]) << 8;
     jump |= @intCast(u16, chunk.byte_code.items[offset.* + 2]);
-    std.debug.print("{s} {d} -> {d}\n", .{ name, offset.* + 3, offset.* + 3 + @intCast(i33, sign) * jump });
+    std.debug.print("{s} {X} -> {X}\n", .{ name, offset.* + 3, offset.* + 3 + @intCast(i33, sign) * jump });
     offset.* += 2;
 }

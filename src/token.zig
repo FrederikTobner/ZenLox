@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// The different types of tokens of the ZenLox language.
 pub const TokenType = enum {
     TOKEN_AND,
     TOKEN_BANG,
@@ -42,12 +43,18 @@ pub const TokenType = enum {
     TOKEN_VAR,
     TOKEN_WHILE,
 };
-
+/// A token that is produced by the lexer.
 const Token = @This();
+/// The type of a token.
 token_type: TokenType,
+/// Pointer to the start of the lexeme.
 start: [*]const u8,
+/// The line number of the token.
 line: u32,
+/// The length of the lexeme.
 length: usize,
+
+/// Initializes a token.
 pub fn init(token_type: TokenType, start: [*]const u8, line: u32, length: usize) Token {
     return Token{
         .token_type = token_type,
@@ -57,12 +64,13 @@ pub fn init(token_type: TokenType, start: [*]const u8, line: u32, length: usize)
     };
 }
 
+/// Returns the lexeme of the token.
 pub fn asLexeme(self: *Token) []const u8 {
     return self.start[0..self.length];
 }
 
 test "Token asLexeme" {
-    var source: []const u8 = "123456";
+    var source: []const u8 = "123";
     var token: Token = Token.init(.TOKEN_NUMBER, @ptrCast([*]const u8, source), 1, 3);
-    try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
+    try std.testing.expectEqualSlices(u8, source[0..], token.asLexeme());
 }

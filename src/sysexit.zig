@@ -1,34 +1,35 @@
+/// Exit codes based on the sysexits.h from UNIX.
 pub const SysExits = enum(u7) {
-    // successful termination
+    /// successful termination
     EX_OK = 0,
-    // command line usage error
+    /// command line usage error
     EX_USAGE = 64,
-    // data format error
+    /// data format error
     EX_DATAERR = 65,
-    // cannot open input
+    /// cannot open input
     EX_NOINPUT = 66,
-    // addressee unknown
+    /// addressee unknown
     EX_NOUSER = 67,
-    // host name unknown
+    /// host name unknown
     EX_NOHOST = 68,
-    // service unavailable
+    /// service unavailable
     EX_UNAVAILABLE = 69,
-    // internal software error
+    /// internal software error
     EX_SOFTWARE = 70,
-    // system error (e.g., can't fork)
+    /// system error (e.g., can't fork)
     EX_OSERR = 71,
-    // critical OS file missing
+    /// critical OS file missing
     EX_OSFILE = 72,
-    // can't create (user) output file
+    /// can't create (user) output file
     EX_CANTCREAT = 73,
-    // input/output error
+    /// input/output error
     EX_IOERR = 74,
-    // temp failure; user is invited to retry
+    /// temp failure; user is invited to retry
     EX_TEMPFAIL = 75,
-    // remote error in protocol
+    /// remote error in protocol
     EX_PROTOCOL = 76,
-    // permission denied
+    /// permission denied
     EX_NOPERM = 77,
-    // configuration error
+    /// configuration error
     EX_CONFIG = 78,
 };

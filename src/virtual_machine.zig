@@ -118,51 +118,20 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
         }
     }
 }
+
+/// Runs the bytecode in the chunk.
 fn run(self: *VirtualMachine) !void {
     while (true) : (self.instruction_index += 1) {
         if (self.trace_execution) {
-            var index_copy = self.instruction_index;
-            Disassembler.disassembleInstruction(&self.chunk, &index_copy);
-            try self.writer.print("stack: ", .{});
-            var counter: u8 = 0;
-            while (counter < self.values.stack_top_index) : (counter += 1) {
-                try self.writer.print("[", .{});
-                try self.values.stack[counter].print(self.writer);
-                try self.writer.print("]", .{});
-            }
-            try std.io.getStdOut().writer().print("\n", .{});
+            try self.traceExecution();
         }
-        const opcode = self.chunk.byte_code.items[self.instruction_index];
-        switch (@intToEnum(OpCode, opcode)) {
+        switch (@intToEnum(OpCode, self.chunk.byte_code.items[self.instruction_index])) {
+            .OP_ADD => try self.binaryOperation(.OP_ADD),
             .OP_CONSTANT => {
                 self.instruction_index += 1;
                 try self.values.push(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]]);
             },
             .OP_CONSTANT_LONG => try self.values.push(self.chunk.values.items[self.readShortWord()]),
-            .OP_RETURN => {
-                self.instruction_index += 1;
-                return;
-            },
-            .OP_NEGATE => try self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
-            .OP_ADD => try self.binaryOperation(.OP_ADD),
-            .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
-            .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
-            .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
-            .OP_NULL => try self.values.push(Value{ .VAL_NULL = undefined }),
-            .OP_TRUE => try self.values.push(Value{ .VAL_BOOL = true }),
-            .OP_FALSE => try self.values.push(Value{ .VAL_BOOL = false }),
-            .OP_NOT => try self.values.push(Value{ .VAL_BOOL = self.values.pop().isFalsey() }),
-            .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
-            .OP_GREATER => try self.binaryOperation(.OP_GREATER),
-            .OP_LESS => try self.binaryOperation(.OP_LESS),
-            .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
-            .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
-            .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
-            .OP_PRINT => {
-                try self.values.pop().print(self.writer);
-                try self.writer.print("\n", .{});
-            },
-            .OP_POP => _ = self.values.pop(),
             .OP_DEFINE_GLOBAL => {
                 self.instruction_index += 1;
                 try self.defineGlobal(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].VAL_OBJECT.as(ObjectString));
@@ -171,6 +140,9 @@ fn run(self: *VirtualMachine) !void {
                 var name_index: u24 = self.readShortWord();
                 try self.defineGlobal(self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString));
             },
+            .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
+            .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
+            .OP_FALSE => try self.values.push(Value{ .VAL_BOOL = false }),
             .OP_GET_GLOBAL => {
                 self.instruction_index += 1;
                 try self.getGlobal(self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].VAL_OBJECT.as(ObjectString));
@@ -178,6 +150,43 @@ fn run(self: *VirtualMachine) !void {
             .OP_GET_GLOBAL_LONG => {
                 const name_index = self.readShortWord();
                 try self.getGlobal(self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString));
+            },
+            .OP_GET_LOCAL => {
+                self.instruction_index += 1;
+                const slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
+                try self.values.push(self.values.peek(slot));
+            },
+            .OP_GREATER => try self.binaryOperation(.OP_GREATER),
+            .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
+            .OP_JUMP => {
+                const offset = self.readShort();
+                self.instruction_index += offset;
+            },
+            .OP_JUMP_IF_FALSE => {
+                const offset = self.readShort();
+                if (self.values.peek(0).isFalsey()) {
+                    self.instruction_index += offset;
+                }
+            },
+            .OP_LESS => try self.binaryOperation(.OP_LESS),
+            .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
+            .OP_LOOP => {
+                const offset = self.readShort();
+                self.instruction_index -= offset;
+            },
+            .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
+            .OP_NEGATE => try self.values.push(Value{ .VAL_NUMBER = -self.values.pop().VAL_NUMBER }),
+            .OP_NOT => try self.values.push(Value{ .VAL_BOOL = self.values.pop().isFalsey() }),
+            .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
+            .OP_NULL => try self.values.push(Value{ .VAL_NULL = undefined }),
+            .OP_RETURN => {
+                self.instruction_index += 1;
+                return;
+            },
+            .OP_POP => _ = self.values.pop(),
+            .OP_PRINT => {
+                try self.values.pop().print(self.writer);
+                try self.writer.print("\n", .{});
             },
             .OP_SET_GLOBAL => {
                 self.instruction_index += 1;
@@ -187,39 +196,31 @@ fn run(self: *VirtualMachine) !void {
                 const name_index = self.readShortWord();
                 try self.setGlobal(self.chunk.values.items[name_index].VAL_OBJECT.as(ObjectString));
             },
-            .OP_GET_LOCAL => {
-                self.instruction_index += 1;
-                const slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
-                try self.values.push(self.values.peek(slot));
-            },
             .OP_SET_LOCAL => {
                 self.instruction_index += 1;
                 const slot = @intCast(u8, self.chunk.byte_code.items[self.instruction_index]);
                 self.values.stack[slot] = self.values.peek(0);
             },
-            .OP_JUMP_IF_FALSE => {
-                const offset = self.readShort();
-                if (self.values.peek(0).isFalsey()) {
-                    self.instruction_index += offset;
-                }
-            },
-            .OP_JUMP => {
-                const offset = self.readShort();
-                self.instruction_index += offset;
-            },
-            .OP_LOOP => {
-                const offset = self.readShort();
-                self.instruction_index -= offset;
-            },
+            .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
+            .OP_TRUE => try self.values.push(Value{ .VAL_BOOL = true }),
         }
     }
-    return;
 }
 
-inline fn readString(self: *VirtualMachine) *ObjectString {
-    return self.chunk.values.items[self.chunk.byte_code.items[self.instruction_index]].as(ObjectString);
+fn traceExecution(self: *VirtualMachine) !void {
+    var index_copy = self.instruction_index;
+    Disassembler.disassembleInstruction(&self.chunk, &index_copy);
+    try self.writer.print("stack: ", .{});
+    var counter: u8 = 0;
+    while (counter < self.values.stack_top_index) : (counter += 1) {
+        try self.writer.print("[", .{});
+        try self.values.stack[counter].print(self.writer);
+        try self.writer.print("]", .{});
+    }
+    try std.io.getStdOut().writer().print("\n", .{});
 }
 
+/// Reads a short from the chunk's byte code.
 inline fn readShort(self: *VirtualMachine) u16 {
     var short = @intCast(u16, self.chunk.byte_code.items[self.instruction_index + 1]) << 8;
     short |= @intCast(u16, self.chunk.byte_code.items[self.instruction_index + 2]);
@@ -227,6 +228,8 @@ inline fn readShort(self: *VirtualMachine) u16 {
     return short;
 }
 
+/// Reads a short from the chunk's byte code.
+/// A short word is 3 bytes long.
 inline fn readShortWord(self: *VirtualMachine) u24 {
     var short_word = @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 1]) << 16;
     short_word |= @intCast(u24, self.chunk.byte_code.items[self.instruction_index + 2]) << 8;
@@ -235,11 +238,13 @@ inline fn readShortWord(self: *VirtualMachine) u24 {
     return short_word;
 }
 
+/// Defines a global variable.
 inline fn defineGlobal(self: *VirtualMachine, name: *ObjectString) !void {
     _ = try self.memory_mutator.globals.set(name, self.values.peek(0));
     _ = self.values.pop();
 }
 
+/// Gets a global variable.
 inline fn getGlobal(self: *VirtualMachine, name: *ObjectString) !void {
     var value = self.memory_mutator.globals.get(name);
     if (value) |val| {
@@ -252,6 +257,7 @@ inline fn getGlobal(self: *VirtualMachine, name: *ObjectString) !void {
     }
 }
 
+/// Sets a global variable.
 inline fn setGlobal(self: *VirtualMachine, name: *ObjectString) !void {
     var value = self.values.peek(0);
     if (try self.memory_mutator.globals.set(name, value)) {

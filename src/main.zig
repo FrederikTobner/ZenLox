@@ -4,6 +4,7 @@ const InterpretResult = @import("virtual_machine.zig").InterpretResult;
 const InterpreterError = @import("virtual_machine.zig").InterpreterError;
 const SysExits = @import("sysexit.zig").SysExits;
 
+/// Main entry point for the program.
 pub fn main() u8 {
     const writer = std.io.getStdOut().writer();
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
@@ -77,6 +78,7 @@ pub fn main() u8 {
     }
 }
 
+/// Handles a single argument passed to the program.
 fn handleSingleArg(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator, vm: *VirtualMachine, arg: []u8) !void {
     if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "--help")) {
         try show_help(writer);
@@ -85,6 +87,7 @@ fn handleSingleArg(writer: *const std.fs.File.Writer, allocator: std.mem.Allocat
     }
 }
 
+/// Starts a REPL session.
 fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     const stdin = std.io.getStdIn();
     try std.io.getStdOut().writer().print(">> ", .{});
@@ -103,6 +106,7 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     }
 }
 
+/// Runs the program from a file.
 fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     var fileContent = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
     fileContent = try allocator.realloc(fileContent, fileContent.len + 1);
@@ -111,14 +115,17 @@ fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void 
     try run(fileContent, vm);
 }
 
+/// Runs the program from a string.
 fn run(code: []const u8, vm: *VirtualMachine) !void {
     try vm.interpret(code);
 }
 
+/// Shows the usage of the program.
 fn show_usage(writer: *const std.fs.File.Writer) !void {
     try writer.print("Usage: clox [path]\n", .{});
 }
 
+/// Shows the help of ZenLox.
 fn show_help(writer: *const std.fs.File.Writer) !void {
     try writer.print("Usage: clox [path]\n", .{});
     try writer.print("  path: Path to a file to run\n", .{});

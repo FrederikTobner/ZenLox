@@ -2,36 +2,38 @@ const std = @import("std");
 
 const Object = @import("object.zig").Object;
 
+/// The different types that a value can be
 pub const Type = enum { VAL_NULL, VAL_BOOL, VAL_NUMBER, VAL_OBJECT };
 
-// Tagged union that can hold any of the supported types.
+/// Tagged union that can hold any of the supported types.
 pub const Value = union(Type) {
     VAL_NULL: void,
     VAL_BOOL: bool,
     VAL_NUMBER: f64,
     VAL_OBJECT: *Object,
 
+    /// Returns true if the value is null and false otherwise
     pub fn isNull(self: Value) bool {
         return switch (self) {
             .VAL_NULL => true,
             else => false,
         };
     }
-
+    /// Returns true if the value is a boolean and false otherwise
     pub fn isBool(self: Value) bool {
         return switch (self) {
             .VAL_BOOL => true,
             else => false,
         };
     }
-
+    /// Returns true if the value is a number and false otherwise
     pub fn isNumber(self: Value) bool {
         return switch (self) {
             .VAL_NUMBER => true,
             else => false,
         };
     }
-
+    /// Returns true if the value is an object and false otherwise
     pub fn isObject(self: Value) bool {
         return switch (self) {
             .VAL_OBJECT => true,
@@ -39,6 +41,7 @@ pub const Value = union(Type) {
         };
     }
 
+    /// Returns true if the value is falsey and false otherwise
     pub fn isFalsey(self: Value) bool {
         return switch (self) {
             .VAL_NULL => true,
@@ -48,6 +51,7 @@ pub const Value = union(Type) {
         };
     }
 
+    /// Returns true if the values are equal and false otherwise
     pub fn isEqual(self: Value, other: Value) bool {
         switch (self) {
             .VAL_NULL => return other.isNull(),
@@ -57,7 +61,7 @@ pub const Value = union(Type) {
         }
     }
 
-    // Prints the value using the given writer
+    /// Prints the value using the given writer
     pub fn print(self: Value, writer: *const std.fs.File.Writer) !void {
         switch (self) {
             .VAL_NULL => try writer.print("null", .{}),
@@ -67,7 +71,7 @@ pub const Value = union(Type) {
         }
     }
 
-    // Prints the value to stderr- used only for debugging purposes
+    /// Prints the value to stderr- used only for debugging purposes
     pub fn printDebug(self: Value) void {
         switch (self) {
             .VAL_NULL => std.debug.print("null", .{}),
@@ -77,6 +81,7 @@ pub const Value = union(Type) {
         }
     }
 
+    /// Returns a string representation of the value's type
     pub fn getPrintableType(self: Value) []const u8 {
         switch (self) {
             .VAL_NULL => return "undefiened",

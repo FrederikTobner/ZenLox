@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const Value = @import("value.zig").Value;
 const Object = @import("object.zig").Object;
 const ObjectType = @import("object.zig").ObjectType;
@@ -6,6 +7,8 @@ const ObjectString = @import("object.zig").ObjectString;
 const fnv1a = @import("fnv1a.zig");
 const Table = @import("table.zig");
 
+/// The MemoryMutator is responsible for allocating memory for the VM.
+/// When the mutator is deinitialized, it will free all memory allocated
 const MemoryMutator = @This();
 
 allocator: std.mem.Allocator = undefined,
@@ -13,6 +16,7 @@ objects: std.ArrayList(*Object),
 strings: Table,
 globals: Table,
 
+/// Initialize the MemoryMutator with the given allocator
 pub fn init(allocator: std.mem.Allocator) MemoryMutator {
     return MemoryMutator{
         .allocator = allocator,
@@ -22,12 +26,11 @@ pub fn init(allocator: std.mem.Allocator) MemoryMutator {
     };
 }
 
+/// Deinitialize the MemoryMutator, freeing all memory allocated
 pub fn deinit(self: *MemoryMutator) !void {
-    var counter: usize = 0;
-    while (counter < self.objects.items.len) : (counter += 1) {
-        var object: *Object = self.objects.items[counter];
+    for (self.objects.items) |object| {
         if (object.object_type == ObjectType.OBJ_STRING) {
-            try self.destroyStringObject(object);
+            try self.destroyStringObject(object.as(ObjectString));
         }
     }
     self.objects.deinit();
@@ -35,13 +38,14 @@ pub fn deinit(self: *MemoryMutator) !void {
     self.globals.deinit();
 }
 
+/// Allocate a new ObjectString with the given chars
 pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     var object_string = try self.allocator.create(ObjectString);
     object_string.chars = try self.allocator.dupe(u8, chars);
     object_string.hash = fnv1a.hash(chars);
     const interned = self.strings.get(object_string);
     if (interned) |in| {
-        try self.destroyStringObject(&object_string.object);
+        try self.destroyStringObject(object_string);
         return in;
     }
     try self.objects.append(&(object_string.object));
@@ -50,6 +54,7 @@ pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     return result;
 }
 
+/// Allocate a new ObjectString by concatenating the given ObjectStrings
 pub fn concatenateStringObjects(self: *MemoryMutator, left: *ObjectString, right: *ObjectString) !Value {
     var chars: []u8 = try self.allocator.alloc(u8, left.chars.len + right.chars.len);
     std.mem.copy(u8, chars, left.chars);
@@ -61,16 +66,16 @@ pub fn concatenateStringObjects(self: *MemoryMutator, left: *ObjectString, right
     object_string.chars = chars;
     object_string.hash = fnv1a.hash(chars);
     const interned = self.strings.get(object_string);
-    if (interned) |in| {
-        try self.destroyStringObject(&object_string.object);
-        return in;
+    if (interned) |interned_string| {
+        try self.destroyStringObject(object_string);
+        return interned_string;
     }
     try self.objects.append(&(object_string.object));
     return Value{ .VAL_OBJECT = &(object_string.object) };
 }
 
-pub fn destroyStringObject(self: *MemoryMutator, object: *Object) !void {
-    var string_object: *ObjectString = object.as(ObjectString);
+/// Free the memory allocated for the given ObjectString
+pub fn destroyStringObject(self: *MemoryMutator, string_object: *ObjectString) !void {
     self.allocator.free(string_object.chars);
     self.allocator.destroy(string_object);
 }
