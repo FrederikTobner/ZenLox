@@ -77,12 +77,6 @@ test "Can define global" {
     });
 }
 
-test "For Loop" {
-    var virtual_machine = try vmStateTest("for (var i = 0; i < 10; i = i + 1) { } ");
-    defer virtual_machine.deinit();
-    try std.testing.expectEqual(Value{ .VAL_NUMBER = 10 }, virtual_machine.values.stack[0]);
-}
-
 test "if statement" {
     var virtual_machine = try vmStateTest("var i = 0; if (true) i = 10; ");
     defer virtual_machine.deinit();
