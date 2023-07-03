@@ -2,29 +2,42 @@ const std = @import("std");
 
 const Chunk = @import("chunk.zig");
 const Lexer = @import("lexer.zig");
+const Object = @import("object.zig").Object;
+const ObjectFunction = @import("object.zig").ObjectFunction;
+const ObjectString = @import("object.zig").ObjectString;
 const OpCode = @import("chunk.zig").OpCode;
 const TokenType = @import("token.zig").TokenType;
 const Token = @import("token.zig");
 const Value = @import("value.zig").Value;
-const Object = @import("object.zig").Object;
-const ObjectString = @import("object.zig").ObjectString;
 const MemoryMutator = @import("memory_mutator.zig");
 const Disassembler = @import("disassembler.zig");
 
 const Compiler = @This();
 parser: Parser,
 lexer: Lexer,
-compiling_chunk: *Chunk = undefined,
 print_bytecode: bool = @import("debug_options").printBytecode,
 memory_mutator: *MemoryMutator = undefined,
 rules: std.EnumArray(TokenType, ParseRule),
 compiler_contex: CompilerContex = undefined,
+
+const FunctionType = enum {
+    TYPE_FUNCTION,
+    TYPE_SCRIPT,
+};
+
 const CompilerContex = struct {
-    locals: [256]Local = undefined,
-    local_count: u8 = 0,
+    object_function: *ObjectFunction = undefined,
+    function_type: FunctionType = FunctionType.TYPE_SCRIPT,
+    locals: [256]Local,
+    local_count: u8 = 1,
     scope_depth: u8 = 0,
-    pub fn init() CompilerContex {
-        return CompilerContex{};
+    pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator) !CompilerContex {
+        var locals: [256]Local = undefined;
+        return CompilerContex{
+            .function_type = function_type,
+            .object_function = try memory_mutator.createFunctionObject(),
+            .locals = locals,
+        };
     }
 };
 const Parser = struct {
@@ -59,7 +72,7 @@ const ParseRule = struct {
     precedence: Precedence = Precedence.PREC_NONE,
 };
 
-pub fn init(memory_mutator: *MemoryMutator) Compiler {
+pub fn init(memory_mutator: *MemoryMutator) !Compiler {
     var rules = std.EnumArray(TokenType, ParseRule).initFill(ParseRule{});
     rules.set(.TOKEN_LEFT_PARENTHESIZE, ParseRule{ .prefix = grouping, .precedence = .PREC_CALL });
     rules.set(.TOKEN_MINUS, ParseRule{ .prefix = unary, .infix = binary, .precedence = .PREC_TERM });
@@ -85,26 +98,24 @@ pub fn init(memory_mutator: *MemoryMutator) Compiler {
         .lexer = undefined,
         .memory_mutator = memory_mutator,
         .rules = rules,
-        .compiler_contex = CompilerContex.init(),
+        .compiler_contex = try CompilerContex.init(FunctionType.TYPE_SCRIPT, memory_mutator),
     };
 }
 
-pub fn compile(self: *Compiler, source: []const u8, chunk: *Chunk) !bool {
-    self.compiling_chunk = chunk;
+pub fn compile(self: *Compiler, source: []const u8) !?*ObjectFunction {
     self.lexer = Lexer.init(source);
     self.advance();
     while (!self.match(.TOKEN_EOF)) {
         try self.declaration();
     }
-    try self.endCompiler();
-    if (self.print_bytecode) {
-        Disassembler.disassemble(self.getCompilingChunk());
-    }
-    return !self.parser.had_error;
+    var fun = try self.endCompilerContext();
+    return if (self.parser.had_error) null else fun;
 }
 
 fn declaration(self: *Compiler) !void {
-    if (self.match(.TOKEN_VAR)) {
+    if (self.match(.TOKEN_FUN)) {
+        try self.funDeclaration();
+    } else if (self.match(.TOKEN_VAR)) {
         try self.varDeclaration();
     } else {
         try self.statement();
@@ -125,6 +136,70 @@ fn varDeclaration(self: *Compiler) !void {
     try self.defineVariable(global);
 }
 
+fn funDeclaration(self: *Compiler) !void {
+    var global = try self.parseVariable("Expect function name.");
+    try self.markInitialized();
+    try self.function(FunctionType.TYPE_FUNCTION);
+    try self.defineVariable(global);
+}
+
+fn markInitialized(self: *Compiler) !void {
+    if (self.compiler_contex.scope_depth == 0) {
+        return;
+    }
+    self.compiler_contex.locals[self.compiler_contex.local_count - 1].depth = self.compiler_contex.scope_depth;
+}
+
+fn function(self: *Compiler, function_type: FunctionType) !void {
+    var compiler_contex = try CompilerContex.init(function_type, self.memory_mutator);
+    var old_compiler_contex = self.compiler_contex;
+    self.compiler_contex = compiler_contex;
+    self.beginScope();
+    self.consume(TokenType.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after function name.");
+    if (!self.check(TokenType.TOKEN_RIGHT_PARENTHESIZE)) {
+        while (true) {
+            self.compiler_contex.object_function.arity += 1;
+            if (self.compiler_contex.object_function.arity > 255) {
+                self.emitErrorAtCurrent("Can't have more than 255 parameters.");
+            }
+            var index = try self.parseVariable("Expect parameter name.");
+            try self.defineVariable(index);
+            if (!self.match(TokenType.TOKEN_COMMA)) {
+                break;
+            }
+        }
+    }
+    self.consume(TokenType.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after parameters.");
+    self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+    try self.block();
+    var fun = try self.endCompilerContext();
+    self.compiler_contex = old_compiler_contex;
+    try self.emitConstant(Value{ .VAL_OBJECT = &fun.object });
+}
+
+fn call(self: *Compiler) !void {
+    var arg_count: u8 = try self.argumentList();
+    try self.emitOpcode(.OP_CALL);
+    try self.emitByte(arg_count);
+}
+
+fn argumentList(self: *Compiler) !u8 {
+    var arg_count: u8 = 0;
+    if (!self.check(TokenType.TOKEN_RIGHT_PARENTHESIZE)) {
+        while (true) {
+            try self.expression();
+            if (arg_count == 255) {
+                self.emitError("Can't have more than 255 arguments.");
+            }
+            arg_count += 1;
+            if (!self.match(TokenType.TOKEN_COMMA)) {
+                break;
+            }
+        }
+    }
+    try self.consume(TokenType.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after arguments.");
+    return arg_count;
+}
 fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
     self.consume(.TOKEN_IDENTIFIER, error_message);
     try self.declareVariable();
@@ -134,11 +209,11 @@ fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
     return try self.identifierConstant(self.parser.previous);
 }
 
-fn defineVariable(self: *Compiler, global: u24) !void {
+fn defineVariable(self: *Compiler, index: u24) !void {
     if (self.compiler_contex.scope_depth > 0) {
         return;
     }
-    try self.emitIndexOpcode(global, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG);
+    try self.emitIndexOpcode(index, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG);
 }
 
 fn declareVariable(self: *Compiler) !void {
@@ -604,10 +679,15 @@ inline fn emitReturn(self: *Compiler) !void {
     try self.emitOpcode(.OP_RETURN);
 }
 
-inline fn endCompiler(self: *Compiler) !void {
+inline fn endCompilerContext(self: *Compiler) !*ObjectFunction {
     try self.emitReturn();
+    if (self.print_bytecode) {
+        self.compiler_contex.object_function.printDebug();
+        Disassembler.disassemble(self.getCompilingChunk());
+    }
+    return self.compiler_contex.object_function;
 }
 
 inline fn getCompilingChunk(self: *Compiler) *Chunk {
-    return self.compiling_chunk;
+    return &self.compiler_contex.object_function.chunk;
 }

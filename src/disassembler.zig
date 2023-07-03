@@ -16,6 +16,7 @@ pub fn disassemble(chunk: *Chunk) void {
 pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
     switch (@intToEnum(OpCode, chunk.byte_code.items[offset.*])) {
         .OP_ADD => simpleInstruction("OP_ADD"),
+        .OP_CALL => constantInstruction(chunk, "OP_CALL", offset),
         .OP_CONSTANT => constantInstruction(chunk, "OP_CONSTANT", offset),
         .OP_CONSTANT_LONG => longConstantInstruction(chunk, "OP_CONSTANT_LONG", offset),
         .OP_DEFINE_GLOBAL => constantInstruction(chunk, "OP_DEFINE_GLOBAL", offset),

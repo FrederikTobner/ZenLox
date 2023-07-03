@@ -4,6 +4,7 @@ const Value = @import("value.zig").Value;
 /// A instruction that the VM can execute
 pub const OpCode = enum(u8) {
     OP_ADD,
+    OP_CALL,
     OP_CONSTANT,
     OP_CONSTANT_LONG,
     OP_DEFINE_GLOBAL,

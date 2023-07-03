@@ -8,7 +8,7 @@ fn vmStateTest(source: []const u8) !VirtualMachine {
     var writer = std.io.getStdOut().writer();
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = general_purpose_allocator.allocator();
-    var virtual_machine = VirtualMachine.init(&writer, allocator);
+    var virtual_machine = try VirtualMachine.init(&writer, allocator);
     try virtual_machine.interpret(source);
     errdefer virtual_machine.deinit();
     return virtual_machine;
@@ -88,6 +88,15 @@ test "if statement" {
 
 test "if else" {
     var virtual_machine = try vmStateTest("var i = 0; if (false) i = 10; else i = 20; ");
+    defer virtual_machine.deinit();
+    try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
+    var value = virtual_machine.memory_mutator.globals.getWithChars("i", FNV1a.hash("i"));
+    try std.testing.expect(value != null);
+    try std.testing.expectEqual(Value{ .VAL_NUMBER = 20 }, value.?);
+}
+
+test "else if" {
+    var virtual_machine = try vmStateTest("var i = 0; if (false) i = 10; else if (true) i = 20; else i = 30; ");
     defer virtual_machine.deinit();
     try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
     var value = virtual_machine.memory_mutator.globals.getWithChars("i", FNV1a.hash("i"));

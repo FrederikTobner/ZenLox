@@ -10,7 +10,9 @@ pub fn main() u8 {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = general_purpose_allocator.allocator();
     defer _ = general_purpose_allocator.deinit();
-    var vm = VirtualMachine.init(&writer, allocator);
+    var vm = VirtualMachine.init(&writer, allocator) catch {
+        return @enumToInt(SysExits.EX_OSERR);
+    };
     defer vm.deinit();
     const args = std.process.argsAlloc(allocator) catch {
         return @enumToInt(SysExits.EX_OSERR);
