@@ -13,8 +13,8 @@ const Value = @import("value.zig").Value;
 
 /// The possible errors that can occur during interpretation.
 pub const InterpreterError = error{
-    Compile_Error,
-    Runtime_Error,
+    CompileError,
+    RuntimeError,
 };
 
 /// Models a call frame of the virtual machine.
@@ -48,7 +48,7 @@ const ValueStack = struct {
     /// Pushes a value onto the stack.
     fn push(self: *ValueStack, value: Value) !void {
         if (@ptrToInt(self.stack_top) > @ptrToInt(&self.items[STACK_MAX - 1])) {
-            return InterpreterError.Runtime_Error;
+            return InterpreterError.RuntimeError;
         }
         self.stack_top[0] = value;
         self.stack_top += 1;
@@ -83,15 +83,14 @@ memory_mutator: *MemoryMutator,
 /// The compiler used by the virtual machine.
 compiler: Compiler,
 
-pub fn init(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator) !VirtualMachine {
+pub fn init(writer: *const std.fs.File.Writer, memory_mutator: *MemoryMutator) !VirtualMachine {
     var value_stack = ValueStack{};
     value_stack.resetStack();
-    var memory_mutator = MemoryMutator.init(allocator);
     return VirtualMachine{
         .value_stack = value_stack,
         .writer = writer,
-        .memory_mutator = &memory_mutator,
-        .compiler = try Compiler.init(&memory_mutator),
+        .memory_mutator = memory_mutator,
+        .compiler = try Compiler.init(memory_mutator),
     };
 }
 
@@ -107,14 +106,14 @@ pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
         self.frame_count = 1;
         try self.run();
     } else {
-        return InterpreterError.Compile_Error;
+        return InterpreterError.CompileError;
     }
 }
 
-fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
+fn binaryOperation(self: *VirtualMachine, comptime op: OpCode) !void {
     var b: Value = self.value_stack.pop();
     var a: Value = self.value_stack.pop();
-    if (a.isNumber() and b.isNumber()) {
+    if (a.is(.VAL_NUMBER) and b.is(.VAL_NUMBER)) {
         switch (op) {
             .OP_ADD => try self.value_stack.push(Value{ .VAL_NUMBER = a.VAL_NUMBER + b.VAL_NUMBER }),
             .OP_SUBTRACT => try self.value_stack.push(Value{ .VAL_NUMBER = a.VAL_NUMBER - b.VAL_NUMBER }),
@@ -131,7 +130,7 @@ fn binaryOperation(self: *VirtualMachine, op: OpCode) !void {
             .OP_EQUAL => try self.value_stack.push(Value{ .VAL_BOOL = a.isEqual(b) }),
             .OP_NOT_EQUAL => try self.value_stack.push(Value{ .VAL_BOOL = !a.isEqual(b) }),
             .OP_ADD => {
-                if (a.isObject() and b.isObject() and a.VAL_OBJECT.object_type == ObjectType.OBJ_STRING and b.VAL_OBJECT.object_type == ObjectType.OBJ_STRING) {
+                if (a.is(.VAL_OBJECT) and b.is(.VAL_OBJECT) and a.VAL_OBJECT.object_type == ObjectType.OBJ_STRING and b.VAL_OBJECT.object_type == ObjectType.OBJ_STRING) {
                     var a_string = a.VAL_OBJECT.as(ObjectString);
                     var b_string = b.VAL_OBJECT.as(ObjectString);
                     var new_string = try self.memory_mutator.concatenateStringObjects(a_string, b_string);
@@ -252,11 +251,9 @@ fn traceExecution(self: *VirtualMachine) !void {
     Disassembler.disassembleInstruction(self.currentChunk(), &index_copy);
     try self.writer.print("stack: ", .{});
     var counter: usize = 0;
-    var stack_pointer = self.value_stack.items[0..];
-    std.debug.print("stack_top: {d}, stack {d}\n", .{ @ptrToInt(self.value_stack.stack_top), @ptrToInt(stack_pointer) });
     while (counter < 5) : (counter += 1) {
         try self.writer.print("[", .{});
-        try self.value_stack.items[counter].print(self.writer);
+        try self.value_stack.stack_top[counter].print(self.writer);
         try self.writer.print("]", .{});
     }
     try std.io.getStdOut().writer().print("\n", .{});
@@ -328,7 +325,7 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
         }
         counter -= 1;
     }
-    return error.Runtime_Error;
+    return error.RuntimeError;
 }
 
 fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {

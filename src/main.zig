@@ -2,6 +2,7 @@ const std = @import("std");
 const VirtualMachine = @import("virtual_machine.zig");
 const InterpretResult = @import("virtual_machine.zig").InterpretResult;
 const InterpreterError = @import("virtual_machine.zig").InterpreterError;
+const MemoryMutator = @import("memory_mutator.zig");
 const SysExits = @import("sysexit.zig").SysExits;
 
 /// Main entry point for the program.
@@ -10,7 +11,8 @@ pub fn main() u8 {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = general_purpose_allocator.allocator();
     defer _ = general_purpose_allocator.deinit();
-    var vm = VirtualMachine.init(&writer, allocator) catch {
+    var memory_mutator = MemoryMutator.init(allocator);
+    var vm = VirtualMachine.init(&writer, &memory_mutator) catch {
         return @enumToInt(SysExits.EX_OSERR);
     };
     defer vm.deinit();
@@ -27,8 +29,8 @@ pub fn main() u8 {
         return @enumToInt(SysExits.EX_OK);
     } else |err| {
         switch (err) {
-            error.Compile_Error => std.debug.print("Compile error\n", .{}),
-            error.Runtime_Error => std.debug.print("Runtime error\n", .{}),
+            error.CompileError => std.debug.print("Compile error\n", .{}),
+            error.RuntimeError => std.debug.print("Runtime error\n", .{}),
             error.AccessDenied => std.debug.print("Access denied\n", .{}),
             error.BadPathName => std.debug.print("Bad path name\n", .{}),
             error.BrokenPipe => std.debug.print("Broken pipe\n", .{}),
@@ -67,15 +69,15 @@ pub fn main() u8 {
             error.WouldBlock => std.debug.print("Would block\n", .{}),
         }
         return switch (err) {
-            error.Compile_Error => @enumToInt(SysExits.EX_DATAERR),
+            error.CompileError => @enumToInt(SysExits.EX_DATAERR),
             error.AccessDenied => @enumToInt(SysExits.EX_NOPERM),
             error.FileNotFound => @enumToInt(SysExits.EX_NOINPUT),
-            error.InvalidUtf8, error.NameTooLong => @enumToInt(SysExits.EX_DATAERR),
             error.NotDir => @enumToInt(SysExits.EX_NOINPUT),
             error.PathAlreadyExists => @enumToInt(SysExits.EX_CANTCREAT),
+            error.RuntimeError, error.Unexpected => @enumToInt(SysExits.EX_SOFTWARE),
+            error.InvalidUtf8, error.NameTooLong => @enumToInt(SysExits.EX_DATAERR),
             error.OutOfMemory, error.OperationAborted, error.SystemResources => @enumToInt(SysExits.EX_OSERR),
             error.BadPathName, error.BrokenPipe, error.ConnectionResetByPeer, error.ConnectionTimedOut, error.DeviceBusy, error.DiskQuota, error.EndOfStream, error.FileBusy, error.FileLocksNotSupported, error.FileTooBig, error.InputOutput, error.InvalidHandle, error.IsDir, error.LockViolation, error.NoDevice, error.NoSpaceLeft, error.NotOpenForWriting, error.NotOpenForReading, error.PipeBusy, error.ProcessFdQuotaExceeded, error.SharingViolation, error.StreamTooLong, error.SymLinkLoop, error.SystemFdQuotaExceeded, error.Unseekable, error.WouldBlock => @enumToInt(SysExits.EX_IOERR),
-            error.Runtime_Error, error.Unexpected => @enumToInt(SysExits.EX_SOFTWARE),
         };
     }
 }

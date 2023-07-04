@@ -98,9 +98,6 @@ pub fn destroyStringObject(self: *MemoryMutator, string_object: *ObjectString) !
 
 /// Free the memory allocated for the given ObjectString
 pub fn destroyFunctionObject(self: *MemoryMutator, function_object: *ObjectFunction) !void {
-    if (function_object.name.len == 0) {
-        return;
-    }
     function_object.chunk.deinit();
     self.allocator.destroy(function_object);
 }

@@ -12,31 +12,9 @@ pub const Value = union(Type) {
     VAL_NUMBER: f64,
     VAL_OBJECT: *Object,
 
-    /// Returns true if the value is null and false otherwise
-    pub fn isNull(self: Value) bool {
+    pub fn is(self: Value, comptime value_type: Type) bool {
         return switch (self) {
-            .VAL_NULL => true,
-            else => false,
-        };
-    }
-    /// Returns true if the value is a boolean and false otherwise
-    pub fn isBool(self: Value) bool {
-        return switch (self) {
-            .VAL_BOOL => true,
-            else => false,
-        };
-    }
-    /// Returns true if the value is a number and false otherwise
-    pub fn isNumber(self: Value) bool {
-        return switch (self) {
-            .VAL_NUMBER => true,
-            else => false,
-        };
-    }
-    /// Returns true if the value is an object and false otherwise
-    pub fn isObject(self: Value) bool {
-        return switch (self) {
-            .VAL_OBJECT => true,
+            value_type => true,
             else => false,
         };
     }
@@ -54,10 +32,10 @@ pub const Value = union(Type) {
     /// Returns true if the values are equal and false otherwise
     pub fn isEqual(self: Value, other: Value) bool {
         switch (self) {
-            .VAL_NULL => return other.isNull(),
-            .VAL_BOOL => return other.isBool() and self.VAL_BOOL == other.VAL_BOOL,
-            .VAL_NUMBER => return other.isNumber() and self.VAL_NUMBER == other.VAL_NUMBER,
-            .VAL_OBJECT => return other.isObject() and self.VAL_OBJECT.isEqual(other.VAL_OBJECT),
+            .VAL_NULL => return other.is(.VAL_NULL),
+            .VAL_BOOL => return other.is(.VAL_BOOL) and self.VAL_BOOL == other.VAL_BOOL,
+            .VAL_NUMBER => return other.is(.VAL_NUMBER) and self.VAL_NUMBER == other.VAL_NUMBER,
+            .VAL_OBJECT => return other.is(.VAL_OBJECT) and self.VAL_OBJECT.isEqual(other.VAL_OBJECT),
         }
     }
 

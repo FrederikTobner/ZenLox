@@ -151,7 +151,7 @@ fn markInitialized(self: *Compiler) !void {
 }
 
 fn function(self: *Compiler, function_type: FunctionType) !void {
-    var compiler_contex = try CompilerContex.init(function_type, self.memory_mutator);
+    const compiler_contex = try CompilerContex.init(function_type, self.memory_mutator);
     var old_compiler_contex = self.compiler_contex;
     self.compiler_contex = compiler_contex;
     self.beginScope();
