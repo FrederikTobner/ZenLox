@@ -353,3 +353,17 @@ fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
     self.frame_count += 1;
     return true;
 }
+
+test "Can fill stack" {
+    const writer = std.io.getStdOut().writer();
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = general_purpose_allocator.allocator();
+    defer _ = general_purpose_allocator.deinit();
+    var memory_mutator = MemoryMutator.init(allocator);
+    var vm = try VirtualMachine.init(&writer, &memory_mutator);
+    defer vm.deinit();
+    var counter: usize = 0;
+    while (counter < STACK_MAX) : (counter += 1) {
+        try vm.value_stack.push(Value{ .VAL_BOOL = true });
+    }
+}

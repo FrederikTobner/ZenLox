@@ -58,13 +58,14 @@ pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     return result;
 }
 
-pub fn createFunctionObject(self: *MemoryMutator) !*ObjectFunction {
+pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunction {
     // We could intern chunks as well in the future but we should hash them
     // based on the opcodes to avoid long compile times
     var object_function = try self.allocator.create(ObjectFunction);
     object_function.arity = 0;
     object_function.chunk = Chunk.init(self.allocator);
     object_function.object.object_type = ObjectType.OBJ_FUNCTION;
+    object_function.name = name;
     try self.objects.append(&(object_function.object));
     return object_function;
 }

@@ -28,15 +28,13 @@ const FunctionType = enum {
 const CompilerContex = struct {
     object_function: *ObjectFunction = undefined,
     function_type: FunctionType = FunctionType.TYPE_SCRIPT,
-    locals: [256]Local,
+    locals: [256]Local = undefined,
     local_count: u8 = 1,
     scope_depth: u8 = 0,
-    pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator) !CompilerContex {
-        var locals: [256]Local = undefined;
+    pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator, function_name: []const u8) !CompilerContex {
         return CompilerContex{
             .function_type = function_type,
-            .object_function = try memory_mutator.createFunctionObject(),
-            .locals = locals,
+            .object_function = try memory_mutator.createFunctionObject(function_name),
         };
     }
 };
@@ -98,7 +96,7 @@ pub fn init(memory_mutator: *MemoryMutator) !Compiler {
         .lexer = undefined,
         .memory_mutator = memory_mutator,
         .rules = rules,
-        .compiler_contex = try CompilerContex.init(FunctionType.TYPE_SCRIPT, memory_mutator),
+        .compiler_contex = try CompilerContex.init(FunctionType.TYPE_SCRIPT, memory_mutator, ""),
     };
 }
 
@@ -151,7 +149,8 @@ fn markInitialized(self: *Compiler) !void {
 }
 
 fn function(self: *Compiler, function_type: FunctionType) !void {
-    const compiler_contex = try CompilerContex.init(function_type, self.memory_mutator);
+    var compiler_contex = try CompilerContex.init(function_type, self.memory_mutator, self.parser.previous.asLexeme());
+    compiler_contex.scope_depth = self.compiler_contex.scope_depth;
     var old_compiler_contex = self.compiler_contex;
     self.compiler_contex = compiler_contex;
     self.beginScope();
