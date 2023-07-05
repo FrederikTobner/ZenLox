@@ -84,13 +84,11 @@ memory_mutator: *MemoryMutator,
 compiler: Compiler,
 
 pub fn init(writer: *const std.fs.File.Writer, memory_mutator: *MemoryMutator) !VirtualMachine {
-    var value_stack = ValueStack{};
-    value_stack.resetStack();
     return VirtualMachine{
-        .value_stack = value_stack,
         .writer = writer,
         .memory_mutator = memory_mutator,
         .compiler = try Compiler.init(memory_mutator),
+        .value_stack = ValueStack{},
     };
 }
 
@@ -99,6 +97,7 @@ pub fn deinit(self: *VirtualMachine) void {
 }
 
 pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
+    self.value_stack.resetStack();
     const function = try self.compiler.compile(source);
     if (function) |fun| {
         try self.value_stack.push(Value{ .VAL_OBJECT = &fun.object });
@@ -107,6 +106,104 @@ pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
         try self.run();
     } else {
         return InterpreterError.CompileError;
+    }
+}
+
+/// Runs the bytecode in the chunk.
+fn run(self: *VirtualMachine) !void {
+    while (true) {
+        if (self.trace_execution) {
+            try self.traceExecution();
+        }
+        switch (self.readOpcode()) {
+            .OP_ADD => try self.binaryOperation(.OP_ADD),
+            .OP_CALL => {
+                var arg_count = self.currentChunk().byte_code.items[self.currentFrame().instruction_index];
+                _ = try self.callValue((self.value_stack.stack_top - arg_count - 1)[0], arg_count);
+            },
+            .OP_CONSTANT => {
+                try self.value_stack.push(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]]);
+                self.currentFrame().instruction_index += 1;
+            },
+            .OP_CONSTANT_LONG => try self.value_stack.push(self.currentChunk().values.items[self.readShortWord()]),
+            .OP_DEFINE_GLOBAL => {
+                try self.defineGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
+                self.currentFrame().instruction_index += 1;
+            },
+            .OP_DEFINE_GLOBAL_LONG => {
+                var name_index: u24 = self.readShortWord();
+                try self.defineGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
+            },
+            .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
+            .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
+            .OP_FALSE => try self.value_stack.push(Value{ .VAL_BOOL = false }),
+            .OP_GET_GLOBAL => {
+                try self.getGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
+                self.currentFrame().instruction_index += 1;
+            },
+            .OP_GET_GLOBAL_LONG => {
+                const name_index = self.readShortWord();
+                try self.getGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
+            },
+            .OP_GET_LOCAL => {
+                const slot = @intCast(u8, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]);
+                try self.value_stack.push(self.value_stack.peek(slot));
+                self.currentFrame().instruction_index += 1;
+            },
+            .OP_GREATER => try self.binaryOperation(.OP_GREATER),
+            .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
+            .OP_JUMP => {
+                const offset = self.readShort();
+                self.currentFrame().instruction_index += offset;
+            },
+            .OP_JUMP_IF_FALSE => {
+                const offset = self.readShort();
+                if (self.value_stack.peek(0).isFalsey()) {
+                    self.currentFrame().instruction_index += offset;
+                }
+            },
+            .OP_LESS => try self.binaryOperation(.OP_LESS),
+            .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
+            .OP_LOOP => {
+                const offset = self.readShort();
+                self.currentFrame().instruction_index -= offset;
+            },
+            .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
+            .OP_NEGATE => try self.value_stack.push(Value{ .VAL_NUMBER = -self.value_stack.pop().VAL_NUMBER }),
+            .OP_NOT => try self.value_stack.push(Value{ .VAL_BOOL = self.value_stack.pop().isFalsey() }),
+            .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
+            .OP_NULL => try self.value_stack.push(Value{ .VAL_NULL = undefined }),
+            .OP_RETURN => {
+                const result = self.value_stack.pop();
+                if (self.frame_count == 1) {
+                    _ = self.value_stack.pop();
+                    return;
+                }
+                self.frame_count -= 1;
+                self.value_stack.stack_top = self.currentFrame().slots;
+                try self.value_stack.push(result);
+            },
+            .OP_POP => _ = self.value_stack.pop(),
+            .OP_PRINT => {
+                try self.value_stack.pop().print(self.writer);
+                try self.writer.print("\n", .{});
+            },
+            .OP_SET_GLOBAL => {
+                try self.setGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
+                self.currentFrame().instruction_index += 1;
+            },
+            .OP_SET_GLOBAL_LONG => {
+                const name_index = self.readShortWord();
+                try self.setGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
+            },
+            .OP_SET_LOCAL => {
+                const slot = @intCast(u8, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]);
+                self.value_stack.items[slot] = self.value_stack.peek(0);
+                self.currentFrame().instruction_index += 1;
+            },
+            .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
+            .OP_TRUE => try self.value_stack.push(Value{ .VAL_BOOL = true }),
+        }
     }
 }
 
@@ -146,114 +243,24 @@ fn binaryOperation(self: *VirtualMachine, comptime op: OpCode) !void {
     }
 }
 
-/// Runs the bytecode in the chunk.
-fn run(self: *VirtualMachine) !void {
-    while (true) : (self.currentFrame().instruction_index += 1) {
-        if (self.trace_execution) {
-            try self.traceExecution();
-        }
-        switch (@intToEnum(OpCode, self.currentChunk().byte_code.items[self.currentFrame().instruction_index])) {
-            .OP_ADD => try self.binaryOperation(.OP_ADD),
-            .OP_CALL => {
-                var arg_count = self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1];
-                self.currentFrame().instruction_index += 1;
-                _ = try self.callValue((self.value_stack.stack_top - arg_count - 1)[0], arg_count);
-            },
-            .OP_CONSTANT => {
-                self.currentFrame().instruction_index += 1;
-                try self.value_stack.push(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]]);
-            },
-            .OP_CONSTANT_LONG => try self.value_stack.push(self.currentChunk().values.items[self.readShortWord()]),
-            .OP_DEFINE_GLOBAL => {
-                self.currentFrame().instruction_index += 1;
-                try self.defineGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_DEFINE_GLOBAL_LONG => {
-                var name_index: u24 = self.readShortWord();
-                try self.defineGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
-            .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
-            .OP_FALSE => try self.value_stack.push(Value{ .VAL_BOOL = false }),
-            .OP_GET_GLOBAL => {
-                self.currentFrame().instruction_index += 1;
-                try self.getGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_GET_GLOBAL_LONG => {
-                const name_index = self.readShortWord();
-                try self.getGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_GET_LOCAL => {
-                self.currentFrame().instruction_index += 1;
-                const slot = @intCast(u8, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]);
-                try self.value_stack.push(self.value_stack.peek(slot));
-            },
-            .OP_GREATER => try self.binaryOperation(.OP_GREATER),
-            .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
-            .OP_JUMP => {
-                const offset = self.readShort();
-                self.currentFrame().instruction_index += offset;
-            },
-            .OP_JUMP_IF_FALSE => {
-                const offset = self.readShort();
-                if (self.value_stack.peek(0).isFalsey()) {
-                    self.currentFrame().instruction_index += offset;
-                }
-            },
-            .OP_LESS => try self.binaryOperation(.OP_LESS),
-            .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
-            .OP_LOOP => {
-                const offset = self.readShort();
-                self.currentFrame().instruction_index -= offset;
-            },
-            .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
-            .OP_NEGATE => try self.value_stack.push(Value{ .VAL_NUMBER = -self.value_stack.pop().VAL_NUMBER }),
-            .OP_NOT => try self.value_stack.push(Value{ .VAL_BOOL = self.value_stack.pop().isFalsey() }),
-            .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
-            .OP_NULL => try self.value_stack.push(Value{ .VAL_NULL = undefined }),
-            .OP_RETURN => {
-                const result = self.value_stack.pop();
-                if (self.frame_count == 1) {
-                    _ = self.value_stack.pop();
-                    self.call_frames[0].instruction_index += 1;
-                    return;
-                }
-                self.frame_count -= 1;
-                self.value_stack.stack_top = self.currentFrame().slots;
-                try self.value_stack.push(result);
-            },
-            .OP_POP => _ = self.value_stack.pop(),
-            .OP_PRINT => {
-                try self.value_stack.pop().print(self.writer);
-                try self.writer.print("\n", .{});
-            },
-            .OP_SET_GLOBAL => {
-                self.currentFrame().instruction_index += 1;
-                try self.setGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_SET_GLOBAL_LONG => {
-                const name_index = self.readShortWord();
-                try self.setGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_SET_LOCAL => {
-                self.currentFrame().instruction_index += 1;
-                const slot = @intCast(u8, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]);
-                self.value_stack.items[slot] = self.value_stack.peek(0);
-            },
-            .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
-            .OP_TRUE => try self.value_stack.push(Value{ .VAL_BOOL = true }),
-        }
-    }
+inline fn readByte(self: *VirtualMachine) u8 {
+    const byte = self.currentChunk().byte_code.items[self.currentFrame().instruction_index];
+    self.currentFrame().instruction_index += 1;
+    return byte;
+}
+
+inline fn readOpcode(self: *VirtualMachine) OpCode {
+    return @intToEnum(OpCode, self.readByte());
 }
 
 fn traceExecution(self: *VirtualMachine) !void {
     var index_copy = self.currentFrame().instruction_index;
     Disassembler.disassembleInstruction(self.currentChunk(), &index_copy);
     try self.writer.print("stack: ", .{});
-    var counter: usize = 0;
-    while (counter < 5) : (counter += 1) {
+    var stack_pointer: [*]Value = self.value_stack.items[0..];
+    while (@ptrToInt(stack_pointer) < @ptrToInt(self.value_stack.stack_top)) : (stack_pointer += 1) {
         try self.writer.print("[", .{});
-        try self.value_stack.stack_top[counter].print(self.writer);
+        try stack_pointer[0].print(self.writer);
         try self.writer.print("]", .{});
     }
     try std.io.getStdOut().writer().print("\n", .{});
@@ -261,8 +268,8 @@ fn traceExecution(self: *VirtualMachine) !void {
 
 /// Reads a short from the chunk's byte code.
 inline fn readShort(self: *VirtualMachine) u16 {
-    var short = @intCast(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]) << 8;
-    short |= @intCast(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 2]);
+    var short = @intCast(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]) << 8;
+    short |= @intCast(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]);
     self.currentFrame().instruction_index += 2;
     return short;
 }
@@ -270,9 +277,9 @@ inline fn readShort(self: *VirtualMachine) u16 {
 /// Reads a short from the chunk's byte code.
 /// A short word is 3 bytes long.
 inline fn readShortWord(self: *VirtualMachine) u24 {
-    var short_word = @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]) << 16;
-    short_word |= @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 2]) << 8;
-    short_word |= @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 3]);
+    var short_word = @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]) << 16;
+    short_word |= @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]) << 8;
+    short_word |= @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 2]);
     self.currentFrame().instruction_index += 3;
     return short_word;
 }
@@ -349,21 +356,39 @@ fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
     if (self.frame_count == 255) {
         try self.reportRunTimeError("Stack overflow", .{});
     }
-    self.call_frames[self.frame_count] = CallFrame.init(function, self.value_stack.stack_top - arg_count - 1, 0);
     self.frame_count += 1;
+    self.call_frames[self.frame_count] = CallFrame.init(function, self.value_stack.stack_top - arg_count - 1, 0);
     return true;
 }
 
 test "Can fill stack" {
-    const writer = std.io.getStdOut().writer();
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = general_purpose_allocator.allocator();
     defer _ = general_purpose_allocator.deinit();
     var memory_mutator = MemoryMutator.init(allocator);
-    var vm = try VirtualMachine.init(&writer, &memory_mutator);
+    var vm = try VirtualMachine.init(&std.io.getStdOut().writer(), &memory_mutator);
     defer vm.deinit();
+    vm.value_stack.resetStack();
+    var counter: usize = 0;
+    var stack_top: [*]Value = vm.value_stack.items[0..];
+    try std.testing.expectEqual(@ptrToInt(stack_top), @ptrToInt(vm.value_stack.stack_top));
+    while (counter < STACK_MAX) : (counter += 1) {
+        try vm.value_stack.push(Value{ .VAL_BOOL = true });
+    }
+    try std.testing.expectEqual(@ptrToInt(stack_top + STACK_MAX), @ptrToInt(vm.value_stack.stack_top));
+}
+
+test "Can detect Stack Overflow" {
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = general_purpose_allocator.allocator();
+    defer _ = general_purpose_allocator.deinit();
+    var memory_mutator = MemoryMutator.init(allocator);
+    var vm = try VirtualMachine.init(&std.io.getStdOut().writer(), &memory_mutator);
+    defer vm.deinit();
+    vm.value_stack.resetStack();
     var counter: usize = 0;
     while (counter < STACK_MAX) : (counter += 1) {
         try vm.value_stack.push(Value{ .VAL_BOOL = true });
     }
+    try std.testing.expectError(error.RuntimeError, vm.value_stack.push(Value{ .VAL_BOOL = true }));
 }

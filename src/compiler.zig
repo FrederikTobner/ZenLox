@@ -72,7 +72,7 @@ const ParseRule = struct {
 
 pub fn init(memory_mutator: *MemoryMutator) !Compiler {
     var rules = std.EnumArray(TokenType, ParseRule).initFill(ParseRule{});
-    rules.set(.TOKEN_LEFT_PARENTHESIZE, ParseRule{ .prefix = grouping, .precedence = .PREC_CALL });
+    rules.set(.TOKEN_LEFT_PARENTHESIZE, ParseRule{ .prefix = grouping, .infix = call, .precedence = .PREC_CALL });
     rules.set(.TOKEN_MINUS, ParseRule{ .prefix = unary, .infix = binary, .precedence = .PREC_TERM });
     rules.set(.TOKEN_PLUS, ParseRule{ .infix = binary, .precedence = .PREC_TERM });
     rules.set(.TOKEN_SLASH, ParseRule{ .infix = binary, .precedence = .PREC_FACTOR });
@@ -176,7 +176,8 @@ fn function(self: *Compiler, function_type: FunctionType) !void {
     try self.emitConstant(Value{ .VAL_OBJECT = &fun.object });
 }
 
-fn call(self: *Compiler) !void {
+fn call(self: *Compiler, can_assign: bool) !void {
+    _ = can_assign;
     var arg_count: u8 = try self.argumentList();
     try self.emitOpcode(.OP_CALL);
     try self.emitByte(arg_count);
@@ -196,7 +197,7 @@ fn argumentList(self: *Compiler) !u8 {
             }
         }
     }
-    try self.consume(TokenType.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after arguments.");
+    self.consume(TokenType.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after arguments.");
     return arg_count;
 }
 fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
@@ -260,6 +261,8 @@ fn statement(self: *Compiler) !void {
         try self.printStatement();
     } else if (self.match(.TOKEN_IF)) {
         try self.ifStatement();
+    } else if (self.match(.TOKEN_RETURN)) {
+        try self.returnStatement();
     } else if (self.match(.TOKEN_WHILE)) {
         try self.whileStatement();
     } else if (self.match(.TOKEN_FOR)) {
@@ -293,6 +296,19 @@ fn ifStatement(self: *Compiler) std.mem.Allocator.Error!void {
         try self.statement();
     }
     try self.patchJump(else_jump);
+}
+
+fn returnStatement(self: *Compiler) !void {
+    if (self.compiler_contex.function_type == .TYPE_SCRIPT) {
+        self.emitError("Can't return from top-level code.");
+    }
+    if (self.match(.TOKEN_SEMICOLON)) {
+        try self.emitReturn();
+    } else {
+        try self.expression();
+        self.consume(.TOKEN_SEMICOLON, "Expect ';' after return value.");
+        try self.emitOpcode(.OP_RETURN);
+    }
 }
 
 fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {

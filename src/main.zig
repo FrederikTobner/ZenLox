@@ -126,11 +126,11 @@ fn run(code: []const u8, vm: *VirtualMachine) !void {
 
 /// Shows the usage of the program.
 fn show_usage(writer: *const std.fs.File.Writer) !void {
-    try writer.print("Usage: clox [path]\n", .{});
+    try writer.print("Usage: Zenlox [path]\n", .{});
 }
 
 /// Shows the help of ZenLox.
 fn show_help(writer: *const std.fs.File.Writer) !void {
-    try writer.print("Usage: clox [path]\n", .{});
+    try writer.print("Usage: Zenlox [path]\n", .{});
     try writer.print("  path: Path to a file to run\n", .{});
 }
