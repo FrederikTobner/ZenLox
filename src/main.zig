@@ -12,6 +12,9 @@ pub fn main() u8 {
     const allocator = general_purpose_allocator.allocator();
     defer _ = general_purpose_allocator.deinit();
     var memory_mutator = MemoryMutator.init(allocator);
+    memory_mutator.defineNativeFunctions() catch {
+        return @enumToInt(SysExits.EX_OSERR);
+    };
     var vm = VirtualMachine.init(&writer, &memory_mutator) catch {
         return @enumToInt(SysExits.EX_OSERR);
     };

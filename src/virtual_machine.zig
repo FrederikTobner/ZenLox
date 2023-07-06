@@ -7,6 +7,7 @@ const MemoryMutator = @import("memory_mutator.zig");
 const Object = @import("object.zig").Object;
 const ObjectString = @import("object.zig").ObjectString;
 const ObjectFunction = @import("object.zig").ObjectFunction;
+const ObjectNativeFunction = @import("object.zig").ObjectNativeFunction;
 const ObjectType = @import("object.zig").ObjectType;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
@@ -121,35 +122,16 @@ fn run(self: *VirtualMachine) !void {
                 var arg_count = self.currentChunk().byte_code.items[self.currentFrame().instruction_index];
                 _ = try self.callValue((self.value_stack.stack_top - arg_count - 1)[0], arg_count);
             },
-            .OP_CONSTANT => {
-                try self.value_stack.push(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]]);
-                self.currentFrame().instruction_index += 1;
-            },
+            .OP_CONSTANT => try self.value_stack.push(self.currentChunk().values.items[self.readByte()]),
             .OP_CONSTANT_LONG => try self.value_stack.push(self.currentChunk().values.items[self.readShortWord()]),
-            .OP_DEFINE_GLOBAL => {
-                try self.defineGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
-                self.currentFrame().instruction_index += 1;
-            },
-            .OP_DEFINE_GLOBAL_LONG => {
-                var name_index: u24 = self.readShortWord();
-                try self.defineGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
-            },
+            .OP_DEFINE_GLOBAL => try self.defineGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
+            .OP_DEFINE_GLOBAL_LONG => try self.defineGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
             .OP_DIVIDE => try self.binaryOperation(.OP_DIVIDE),
             .OP_EQUAL => try self.binaryOperation(.OP_EQUAL),
             .OP_FALSE => try self.value_stack.push(Value{ .VAL_BOOL = false }),
-            .OP_GET_GLOBAL => {
-                try self.getGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
-                self.currentFrame().instruction_index += 1;
-            },
-            .OP_GET_GLOBAL_LONG => {
-                const name_index = self.readShortWord();
-                try self.getGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_GET_LOCAL => {
-                const slot = @intCast(u8, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]);
-                try self.value_stack.push(self.value_stack.peek(slot));
-                self.currentFrame().instruction_index += 1;
-            },
+            .OP_GET_GLOBAL => try self.getGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
+            .OP_GET_GLOBAL_LONG => try self.getGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
+            .OP_GET_LOCAL => try self.value_stack.push(self.value_stack.peek(self.readByte())),
             .OP_GREATER => try self.binaryOperation(.OP_GREATER),
             .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
             .OP_JUMP => {
@@ -164,10 +146,7 @@ fn run(self: *VirtualMachine) !void {
             },
             .OP_LESS => try self.binaryOperation(.OP_LESS),
             .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
-            .OP_LOOP => {
-                const offset = self.readShort();
-                self.currentFrame().instruction_index -= offset;
-            },
+            .OP_LOOP => self.currentFrame().instruction_index -= self.readShort(),
             .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
             .OP_NEGATE => try self.value_stack.push(Value{ .VAL_NUMBER = -self.value_stack.pop().VAL_NUMBER }),
             .OP_NOT => try self.value_stack.push(Value{ .VAL_BOOL = self.value_stack.pop().isFalsey() }),
@@ -188,19 +167,9 @@ fn run(self: *VirtualMachine) !void {
                 try self.value_stack.pop().print(self.writer);
                 try self.writer.print("\n", .{});
             },
-            .OP_SET_GLOBAL => {
-                try self.setGlobal(self.currentChunk().values.items[self.currentChunk().byte_code.items[self.currentFrame().instruction_index]].VAL_OBJECT.as(ObjectString));
-                self.currentFrame().instruction_index += 1;
-            },
-            .OP_SET_GLOBAL_LONG => {
-                const name_index = self.readShortWord();
-                try self.setGlobal(self.currentChunk().values.items[name_index].VAL_OBJECT.as(ObjectString));
-            },
-            .OP_SET_LOCAL => {
-                const slot = @intCast(u8, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]);
-                self.value_stack.items[slot] = self.value_stack.peek(0);
-                self.currentFrame().instruction_index += 1;
-            },
+            .OP_SET_GLOBAL => try self.setGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
+            .OP_SET_GLOBAL_LONG => try self.setGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
+            .OP_SET_LOCAL => self.value_stack.items[self.readByte()] = self.value_stack.peek(0),
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
             .OP_TRUE => try self.value_stack.push(Value{ .VAL_BOOL = true }),
         }
@@ -340,6 +309,14 @@ fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {
         .VAL_OBJECT => {
             switch (callee.VAL_OBJECT.object_type) {
                 .OBJ_FUNCTION => return self.call(callee.VAL_OBJECT.as(ObjectFunction), arg_count),
+                .OBJ_NATIVE_FUNCTION => {
+                    var native_function = callee.VAL_OBJECT.as(ObjectNativeFunction);
+                    var result = native_function.function((self.value_stack.stack_top - arg_count)[0..arg_count]);
+                    self.value_stack.stack_top -= arg_count + 1;
+                    try self.value_stack.push(result);
+                    self.currentFrame().instruction_index += 1;
+                    return true;
+                },
                 else => {},
             }
         },
@@ -356,8 +333,9 @@ fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
     if (self.frame_count == 255) {
         try self.reportRunTimeError("Stack overflow", .{});
     }
-    self.frame_count += 1;
+    self.currentFrame().instruction_index += 1;
     self.call_frames[self.frame_count] = CallFrame.init(function, self.value_stack.stack_top - arg_count - 1, 0);
+    self.frame_count += 1;
     return true;
 }
 

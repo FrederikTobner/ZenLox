@@ -1,11 +1,13 @@
 const std = @import("std");
 
 const Chunk = @import("chunk.zig");
+const Value = @import("value.zig").Value;
 
 /// The different types of objects
 pub const ObjectType = enum {
     OBJ_STRING,
     OBJ_FUNCTION,
+    OBJ_NATIVE_FUNCTION,
 };
 
 /// Base object type
@@ -28,6 +30,8 @@ pub const Object = struct {
             .OBJ_STRING => return self == other,
             // We could compare the bytecode, but that would be a lot of work
             .OBJ_FUNCTION => return self == other,
+            // Native functions are  equal
+            .OBJ_NATIVE_FUNCTION => return self == other,
         }
     }
 
@@ -36,6 +40,7 @@ pub const Object = struct {
         switch (self.object_type) {
             .OBJ_STRING => try self.as(ObjectString).print(writer),
             .OBJ_FUNCTION => try self.as(ObjectFunction).print(writer),
+            .OBJ_NATIVE_FUNCTION => try self.as(ObjectNativeFunction).print(writer),
         }
     }
 
@@ -44,6 +49,7 @@ pub const Object = struct {
         switch (self.object_type) {
             .OBJ_STRING => self.as(ObjectString).printDebug(),
             .OBJ_FUNCTION => self.as(ObjectFunction).printDebug(),
+            .OBJ_NATIVE_FUNCTION => self.as(ObjectNativeFunction).printDebug(),
         }
     }
 };
@@ -81,7 +87,7 @@ pub const ObjectFunction = struct {
     /// Prints the function to stdout using the given `std.fs.File.Writer`
     pub fn print(self: *ObjectFunction, writer: *const std.fs.File.Writer) !void {
         if (self.name.len > 0) {
-            try writer.print("<fn >", .{});
+            try writer.print("<fn {s}>", .{self.name});
         } else {
             try writer.print("<script>", .{});
         }
@@ -90,9 +96,30 @@ pub const ObjectFunction = struct {
     /// Print the function to stderr - only for debugging and error messages
     pub fn printDebug(self: *ObjectFunction) void {
         if (self.name.len > 0) {
-            std.debug.print("<fn >", .{});
+            std.debug.print("<fn {s}>", .{self.name});
         } else {
             std.debug.print("<script>", .{});
         }
+    }
+};
+
+pub const ObjectNativeFunction = struct {
+    /// The base object
+    object: Object,
+    /// The arity of the function
+    arity: u8,
+    /// The function pointer
+    function: *const fn ([]Value) Value,
+
+    /// Prints the function to stdout using the given `std.fs.File.Writer`
+    pub fn print(self: *ObjectNativeFunction, writer: *const std.fs.File.Writer) !void {
+        _ = self;
+        try writer.print("<native fn>", .{});
+    }
+
+    /// Print the function to stderr - only for debugging and error messages
+    pub fn printDebug(self: *ObjectNativeFunction) void {
+        _ = self;
+        std.debug.print("<native fn>", .{});
     }
 };

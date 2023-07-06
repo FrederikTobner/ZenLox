@@ -5,17 +5,6 @@ const FNV1a = @import("../fnv1a.zig");
 const Value = @import("../value.zig").Value;
 const MemoryMutator = @import("../memory_mutator.zig");
 
-fn vmStateTest(source: []const u8) !VirtualMachine {
-    var writer = std.io.getStdOut().writer();
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = general_purpose_allocator.allocator();
-    var memory_mutator = MemoryMutator.init(allocator);
-    var virtual_machine = try VirtualMachine.init(&writer, &memory_mutator);
-    try virtual_machine.interpret(source);
-    errdefer virtual_machine.deinit();
-    return virtual_machine;
-}
-
 fn variableBasedTest(comptime assignedValue: []const u8, expectedValue: Value) !void {
     var writer = std.io.getStdOut().writer();
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};

@@ -6,6 +6,8 @@ const Object = @import("object.zig").Object;
 const ObjectType = @import("object.zig").ObjectType;
 const ObjectString = @import("object.zig").ObjectString;
 const ObjectFunction = @import("object.zig").ObjectFunction;
+const ObjectNativeFunction = @import("object.zig").ObjectNativeFunction;
+const NativeFunctions = @import("native_functions.zig");
 const Table = @import("table.zig");
 const Value = @import("value.zig").Value;
 
@@ -28,12 +30,27 @@ pub fn init(allocator: std.mem.Allocator) MemoryMutator {
     };
 }
 
+pub fn defineNativeFunctions(self: *MemoryMutator) !void {
+    try self.defineNativeFunction("clock", NativeFunctions.clock, 0);
+}
+
+fn defineNativeFunction(self: *MemoryMutator, comptime name: []const u8, comptime function: *const fn ([]Value) Value, comptime arity: u8) !void {
+    const native_function = try self.allocator.create(ObjectNativeFunction);
+    native_function.function = function;
+    native_function.arity = arity;
+    const native_function_name = try self.createStringObjectValue(name);
+    native_function.object.object_type = ObjectType.OBJ_NATIVE_FUNCTION;
+    _ = try self.globals.set(native_function_name.VAL_OBJECT.as(ObjectString), Value{ .VAL_OBJECT = &(native_function.object) });
+    try self.objects.append(&(native_function.object));
+}
+
 /// Deinitialize the MemoryMutator, freeing all memory allocated
 pub fn deinit(self: *MemoryMutator) !void {
     for (self.objects.items) |object| {
         switch (object.object_type) {
             .OBJ_STRING => try self.destroyStringObject(object.as(ObjectString)),
             .OBJ_FUNCTION => try self.destroyFunctionObject(object.as(ObjectFunction)),
+            .OBJ_NATIVE_FUNCTION => try self.destroyNativeFunctionObject(object.as(ObjectNativeFunction)),
         }
     }
     self.objects.deinit();
@@ -65,7 +82,7 @@ pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunc
     object_function.arity = 0;
     object_function.chunk = Chunk.init(self.allocator);
     object_function.object.object_type = ObjectType.OBJ_FUNCTION;
-    object_function.name = name;
+    object_function.name = try self.allocator.dupe(u8, name);
     try self.objects.append(&(object_function.object));
     return object_function;
 }
@@ -100,5 +117,10 @@ pub fn destroyStringObject(self: *MemoryMutator, string_object: *ObjectString) !
 /// Free the memory allocated for the given ObjectString
 pub fn destroyFunctionObject(self: *MemoryMutator, function_object: *ObjectFunction) !void {
     function_object.chunk.deinit();
+    self.allocator.free(function_object.name);
+    self.allocator.destroy(function_object);
+}
+
+pub fn destroyNativeFunctionObject(self: *MemoryMutator, function_object: *ObjectNativeFunction) !void {
     self.allocator.destroy(function_object);
 }
