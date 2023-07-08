@@ -15,9 +15,13 @@ const Value = @import("value.zig").Value;
 /// When the mutator is deinitialized, it will free all memory allocated
 const MemoryMutator = @This();
 
+/// The allocator used to allocate memory with the MemoryMutator
 allocator: std.mem.Allocator = undefined,
+/// The objects that have been allocated by the MemoryMutator
 objects: std.ArrayList(*Object),
+/// The strings that have been allocated by the MemoryMutator
 strings: Table,
+/// The globals that have been allocated by the MemoryMutator
 globals: Table,
 
 /// Initialize the MemoryMutator with the given allocator
@@ -30,10 +34,12 @@ pub fn init(allocator: std.mem.Allocator) MemoryMutator {
     };
 }
 
+/// Defines the native functions of the Zenlox language
 pub fn defineNativeFunctions(self: *MemoryMutator) !void {
     try self.defineNativeFunction("clock", NativeFunctions.clock, 0);
 }
 
+/// Define a native function with the given name, function pointer, and arity
 fn defineNativeFunction(self: *MemoryMutator, comptime name: []const u8, comptime function: *const fn ([]Value) Value, comptime arity: u8) !void {
     const native_function = try self.allocator.create(ObjectNativeFunction);
     native_function.function = function;
@@ -108,19 +114,20 @@ pub fn concatenateStringObjects(self: *MemoryMutator, left: *ObjectString, right
     return Value{ .VAL_OBJECT = &(object_string.object) };
 }
 
-/// Free the memory allocated for the given ObjectString
+/// Free's the memory allocated for the given ObjectString
 pub fn destroyStringObject(self: *MemoryMutator, string_object: *ObjectString) !void {
     self.allocator.free(string_object.chars);
     self.allocator.destroy(string_object);
 }
 
-/// Free the memory allocated for the given ObjectString
+/// Free's the memory allocated for the given ObjectString
 pub fn destroyFunctionObject(self: *MemoryMutator, function_object: *ObjectFunction) !void {
     function_object.chunk.deinit();
     self.allocator.free(function_object.name);
     self.allocator.destroy(function_object);
 }
 
+/// Free's the memory allocated for the given ObjectString
 pub fn destroyNativeFunctionObject(self: *MemoryMutator, function_object: *ObjectNativeFunction) !void {
     self.allocator.destroy(function_object);
 }

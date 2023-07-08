@@ -115,3 +115,17 @@ test "else if" {
     try std.testing.expect(value != null);
     try std.testing.expectEqual(Value{ .VAL_NUMBER = 20 }, value.?);
 }
+
+test "while" {
+    var writer = std.io.getStdOut().writer();
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = general_purpose_allocator.allocator();
+    var memory_mutator = MemoryMutator.init(allocator);
+    var virtual_machine = try VirtualMachine.init(&writer, &memory_mutator);
+    try virtual_machine.interpret("var i = 0; while(i < 3) {i = i + 1;} ");
+    defer virtual_machine.deinit();
+    try std.testing.expectEqual(virtual_machine.memory_mutator.globals.count, 1);
+    var value = virtual_machine.memory_mutator.globals.getWithChars("i", FNV1a.hash("i"));
+    try std.testing.expect(value != null);
+    try std.testing.expectEqual(Value{ .VAL_NUMBER = 3 }, value.?);
+}

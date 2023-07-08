@@ -4,6 +4,7 @@ const Chunk = @import("chunk.zig");
 const Compiler = @import("compiler.zig");
 const Disassembler = @import("disassembler.zig");
 const MemoryMutator = @import("memory_mutator.zig");
+const NativeFunctions = @import("native_functions.zig");
 const Object = @import("object.zig").Object;
 const ObjectString = @import("object.zig").ObjectString;
 const ObjectFunction = @import("object.zig").ObjectFunction;
@@ -98,6 +99,7 @@ pub fn deinit(self: *VirtualMachine) void {
 }
 
 pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
+    NativeFunctions.start_time = std.time.milliTimestamp();
     self.value_stack.resetStack();
     const function = try self.compiler.compile(source);
     if (function) |fun| {
@@ -146,7 +148,10 @@ fn run(self: *VirtualMachine) !void {
             },
             .OP_LESS => try self.binaryOperation(.OP_LESS),
             .OP_LESS_EQUAL => try self.binaryOperation(.OP_LESS_EQUAL),
-            .OP_LOOP => self.currentFrame().instruction_index -= self.readShort(),
+            .OP_LOOP => {
+                const offset = self.readShort();
+                self.currentFrame().instruction_index -= offset;
+            },
             .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
             .OP_NEGATE => try self.value_stack.push(Value{ .VAL_NUMBER = -self.value_stack.pop().VAL_NUMBER }),
             .OP_NOT => try self.value_stack.push(Value{ .VAL_BOOL = self.value_stack.pop().isFalsey() }),
@@ -309,14 +314,7 @@ fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {
         .VAL_OBJECT => {
             switch (callee.VAL_OBJECT.object_type) {
                 .OBJ_FUNCTION => return self.call(callee.VAL_OBJECT.as(ObjectFunction), arg_count),
-                .OBJ_NATIVE_FUNCTION => {
-                    var native_function = callee.VAL_OBJECT.as(ObjectNativeFunction);
-                    var result = native_function.function((self.value_stack.stack_top - arg_count)[0..arg_count]);
-                    self.value_stack.stack_top -= arg_count + 1;
-                    try self.value_stack.push(result);
-                    self.currentFrame().instruction_index += 1;
-                    return true;
-                },
+                .OBJ_NATIVE_FUNCTION => return self.callNative(callee.VAL_OBJECT.as(ObjectNativeFunction), arg_count),
                 else => {},
             }
         },
@@ -336,6 +334,14 @@ fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
     self.currentFrame().instruction_index += 1;
     self.call_frames[self.frame_count] = CallFrame.init(function, self.value_stack.stack_top - arg_count - 1, 0);
     self.frame_count += 1;
+    return true;
+}
+
+fn callNative(self: *VirtualMachine, native_function: *ObjectNativeFunction, arg_count: u8) !bool {
+    var result = native_function.function((self.value_stack.stack_top - arg_count)[0..arg_count]);
+    self.value_stack.stack_top -= arg_count + 1;
+    try self.value_stack.push(result);
+    self.currentFrame().instruction_index += 1;
     return true;
 }
 

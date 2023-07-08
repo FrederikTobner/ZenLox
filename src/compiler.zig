@@ -31,6 +31,7 @@ const CompilerContex = struct {
     locals: [256]Local = undefined,
     local_count: u8 = 1,
     scope_depth: u8 = 0,
+    /// Creates a new compiler context.
     pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator, function_name: []const u8) !CompilerContex {
         return CompilerContex{
             .function_type = function_type,
@@ -70,6 +71,7 @@ const ParseRule = struct {
     precedence: Precedence = Precedence.PREC_NONE,
 };
 
+/// Initializes the compiler.
 pub fn init(memory_mutator: *MemoryMutator) !Compiler {
     var rules = std.EnumArray(TokenType, ParseRule).initFill(ParseRule{});
     rules.set(.TOKEN_LEFT_PARENTHESIZE, ParseRule{ .prefix = grouping, .infix = call, .precedence = .PREC_CALL });
@@ -385,13 +387,12 @@ fn patchJump(self: *Compiler, offset: u16) !void {
         self.emitError("Too much code to jump over.");
     }
     const jump_bytes = [_]u8{ @intCast(u8, (jump >> 8)), @intCast(u8, jump & 0xff) };
-    try self.getCompilingChunk().byte_code.replaceRange(offset, 2, jump_bytes[0..jump_bytes.len]);
+    try self.getCompilingChunk().byte_code.replaceRange(offset, 2, jump_bytes[0..]);
 }
 
 fn expressionStatement(self: *Compiler) !void {
     try self.expression();
     self.consume(.TOKEN_SEMICOLON, "Expect ';' after expression.");
-    try self.emitOpcode(OpCode.OP_POP);
 }
 
 fn variable(self: *Compiler, can_assign: bool) !void {
