@@ -30,7 +30,7 @@ const CompilerContex = struct {
     function_type: FunctionType = FunctionType.TYPE_SCRIPT,
     locals: [256]Local = undefined,
     local_count: u8 = 1,
-    scope_depth: u8 = 0,
+    scope_depth: u7 = 0,
     /// Creates a new compiler context.
     pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator, function_name: []const u8) !CompilerContex {
         return CompilerContex{
@@ -48,7 +48,7 @@ const Parser = struct {
 
 const Local = struct {
     name: Token = undefined,
-    depth: u8 = 0,
+    depth: i8 = 0,
 };
 
 const Precedence = enum {
@@ -93,6 +93,7 @@ pub fn init(memory_mutator: *MemoryMutator) !Compiler {
     rules.set(.TOKEN_STRING, ParseRule{ .prefix = string });
     rules.set(.TOKEN_IDENTIFIER, ParseRule{ .prefix = variable });
     rules.set(.TOKEN_AND, ParseRule{ .infix = andExpression, .precedence = .PREC_AND });
+    rules.set(.TOKEN_EQUAL, ParseRule{ .precedence = .PREC_ASSIGNMENT });
     return Compiler{
         .parser = Parser{},
         .lexer = undefined,
@@ -143,6 +144,8 @@ fn funDeclaration(self: *Compiler) !void {
     try self.defineVariable(global);
 }
 
+/// Marks a variable that already has been declared as initialized
+/// This only applies to local variables
 fn markInitialized(self: *Compiler) !void {
     if (self.compiler_contex.scope_depth == 0) {
         return;
@@ -213,6 +216,7 @@ fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
 
 fn defineVariable(self: *Compiler, index: u24) !void {
     if (self.compiler_contex.scope_depth > 0) {
+        try self.markInitialized();
         return;
     }
     try self.emitIndexOpcode(index, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG);
@@ -249,7 +253,7 @@ fn addLocal(self: *Compiler, name: Token) !void {
         self.emitError("Too many local variables in function.");
         return;
     }
-    const local: Local = Local{ .name = name, .depth = self.compiler_contex.scope_depth };
+    const local: Local = Local{ .name = name, .depth = -1 };
     self.compiler_contex.locals[self.compiler_contex.local_count] = local;
     self.compiler_contex.local_count += 1;
 }
@@ -356,7 +360,6 @@ fn whileStatement(self: *Compiler) std.mem.Allocator.Error!void {
     try self.expression();
     self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after condition.");
     const exit_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
-    try self.emitOpcode(.OP_POP);
     try self.statement();
     try self.emitLoop(loop_start);
     try self.patchJump(exit_jump);
@@ -393,6 +396,7 @@ fn patchJump(self: *Compiler, offset: u16) !void {
 fn expressionStatement(self: *Compiler) !void {
     try self.expression();
     self.consume(.TOKEN_SEMICOLON, "Expect ';' after expression.");
+    try self.emitOpcode(.OP_POP);
 }
 
 fn variable(self: *Compiler, can_assign: bool) !void {
@@ -426,8 +430,7 @@ fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
 
 fn resolveLocal(self: *Compiler, name: Token) !i64 {
     var counter = self.compiler_contex.local_count;
-    while (counter > 0) {
-        counter -= 1;
+    while (counter > 0) : (counter -= 1) {
         var local: Local = self.compiler_contex.locals[counter];
         if (identifiersEqual(name.start[0..name.length], local.name.start[0..local.name.length])) {
             return counter;

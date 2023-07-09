@@ -103,8 +103,8 @@ pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
     self.value_stack.resetStack();
     const function = try self.compiler.compile(source);
     if (function) |fun| {
-        try self.value_stack.push(Value{ .VAL_OBJECT = &fun.object });
         self.call_frames[self.frame_count] = CallFrame.init(fun, self.value_stack.stack_top, if (self.frame_count == 0) 0 else self.call_frames[self.frame_count - 1].instruction_index);
+        try self.value_stack.push(Value{ .VAL_OBJECT = &fun.object });
         self.frame_count = 1;
         try self.run();
     } else {
@@ -133,7 +133,7 @@ fn run(self: *VirtualMachine) !void {
             .OP_FALSE => try self.value_stack.push(Value{ .VAL_BOOL = false }),
             .OP_GET_GLOBAL => try self.getGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
             .OP_GET_GLOBAL_LONG => try self.getGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
-            .OP_GET_LOCAL => try self.value_stack.push(self.value_stack.peek(self.readByte())),
+            .OP_GET_LOCAL => try self.value_stack.push(self.currentFrame().slots[self.readByte()]),
             .OP_GREATER => try self.binaryOperation(.OP_GREATER),
             .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
             .OP_JUMP => {
@@ -338,6 +338,9 @@ fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
 }
 
 fn callNative(self: *VirtualMachine, native_function: *ObjectNativeFunction, arg_count: u8) !bool {
+    if (arg_count != native_function.arity) {
+        try self.reportRunTimeError("Expected {d} arguments but got {d}", .{ native_function.arity, arg_count });
+    }
     var result = native_function.function((self.value_stack.stack_top - arg_count)[0..arg_count]);
     self.value_stack.stack_top -= arg_count + 1;
     try self.value_stack.push(result);
