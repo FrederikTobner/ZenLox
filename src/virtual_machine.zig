@@ -15,15 +15,21 @@ const Value = @import("value.zig").Value;
 
 /// The possible errors that can occur during interpretation.
 pub const InterpreterError = error{
+    /// An error that occurred during compilation.
     CompileError,
+    /// An error that occurred during runtime.
     RuntimeError,
 };
 
 /// Models a call frame of the virtual machine.
 const CallFrame = struct {
+    /// The function that is being called.
     function: *ObjectFunction,
+    /// The index of the instruction that is being executed.
     instruction_index: u32 = undefined,
+    /// The slots for the call frame.
     slots: [*]Value,
+    /// Initializes a call frame.
     pub fn init(function: *ObjectFunction, slots: [*]Value, instruction_index: u32) CallFrame {
         return CallFrame{
             .slots = slots,
@@ -85,6 +91,7 @@ memory_mutator: *MemoryMutator,
 /// The compiler used by the virtual machine.
 compiler: Compiler,
 
+/// Initializes the virtual machine.
 pub fn init(writer: *const std.fs.File.Writer, memory_mutator: *MemoryMutator) !VirtualMachine {
     return VirtualMachine{
         .writer = writer,
@@ -94,10 +101,12 @@ pub fn init(writer: *const std.fs.File.Writer, memory_mutator: *MemoryMutator) !
     };
 }
 
+/// Deinitializes the virtual machine.
 pub fn deinit(self: *VirtualMachine) void {
     try self.memory_mutator.deinit();
 }
 
+/// Interprets the given source code.
 pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
     NativeFunctions.start_time = std.time.milliTimestamp();
     self.value_stack.resetStack();
@@ -181,6 +190,7 @@ fn run(self: *VirtualMachine) !void {
     }
 }
 
+/// Executes a binary operation using the top two values on the stack.
 fn binaryOperation(self: *VirtualMachine, comptime op: OpCode) !void {
     var b: Value = self.value_stack.pop();
     var a: Value = self.value_stack.pop();
@@ -217,16 +227,19 @@ fn binaryOperation(self: *VirtualMachine, comptime op: OpCode) !void {
     }
 }
 
+/// Reads a byte from the current chunk.
 inline fn readByte(self: *VirtualMachine) u8 {
     const byte = self.currentChunk().byte_code.items[self.currentFrame().instruction_index];
     self.currentFrame().instruction_index += 1;
     return byte;
 }
 
+/// Reads an opcode from the current chunk.
 inline fn readOpcode(self: *VirtualMachine) OpCode {
     return @intToEnum(OpCode, self.readByte());
 }
 
+/// Traces the execution of the virtual machine.
 fn traceExecution(self: *VirtualMachine) !void {
     var index_copy = self.currentFrame().instruction_index;
     Disassembler.disassembleInstruction(self.currentChunk(), &index_copy);
@@ -283,14 +296,17 @@ inline fn setGlobal(self: *VirtualMachine, name: *ObjectString) !void {
     }
 }
 
+/// Gets the current chunk.
 inline fn currentChunk(self: *VirtualMachine) *Chunk {
     return &self.currentFrame().function.chunk;
 }
 
+/// Gets the current call frame.
 inline fn currentFrame(self: *VirtualMachine) *CallFrame {
     return &self.call_frames[self.frame_count - 1];
 }
 
+/// Reports an error that occured during runtime.
 fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: anytype) !void {
     std.debug.print("Runtime error:\n", .{});
     std.debug.print(format, args);
@@ -309,6 +325,7 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
     return error.RuntimeError;
 }
 
+/// Calls a value, either a function or a native function.
 fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {
     switch (callee) {
         .VAL_OBJECT => {
@@ -324,6 +341,7 @@ fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {
     return false;
 }
 
+/// Calls a function.
 fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
     if (arg_count != function.arity) {
         try self.reportRunTimeError("Expected {d} arguments but got {d}", .{ function.arity, arg_count });
@@ -337,6 +355,7 @@ fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
     return true;
 }
 
+/// Calls a native function.
 fn callNative(self: *VirtualMachine, native_function: *ObjectNativeFunction, arg_count: u8) !bool {
     if (arg_count != native_function.arity) {
         try self.reportRunTimeError("Expected {d} arguments but got {d}", .{ native_function.arity, arg_count });

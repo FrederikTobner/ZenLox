@@ -87,7 +87,7 @@ pub fn main() u8 {
 
 /// Handles a single argument passed to the program.
 fn handleSingleArg(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator, vm: *VirtualMachine, arg: []u8) !void {
-    if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "--help")) {
+    if ((arg.len == 6 and std.mem.eql(u8, arg, "--help")) or (arg.len == 2 and std.mem.eql(u8, arg, "-h"))) {
         try show_help(writer);
     } else {
         try runFile(arg, allocator, vm);
@@ -116,8 +116,6 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
 /// Runs the program from a file.
 fn runFile(path: []u8, allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     var fileContent = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
-    fileContent = try allocator.realloc(fileContent, fileContent.len + 1);
-    fileContent[fileContent.len - 1] = 0;
     defer allocator.free(fileContent);
     try run(fileContent, vm);
 }

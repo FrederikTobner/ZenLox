@@ -37,6 +37,9 @@ pub fn init(allocator: std.mem.Allocator) MemoryMutator {
 /// Defines the native functions of the Zenlox language
 pub fn defineNativeFunctions(self: *MemoryMutator) !void {
     try self.defineNativeFunction("clock", NativeFunctions.clock, 0);
+    try self.defineNativeFunction("onWindows", NativeFunctions.onWindows, 0);
+    try self.defineNativeFunction("onMac", NativeFunctions.onMac, 0);
+    try self.defineNativeFunction("onLinux", NativeFunctions.onLinux, 0);
 }
 
 /// Define a native function with the given name, function pointer, and arity

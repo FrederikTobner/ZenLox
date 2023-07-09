@@ -7,11 +7,16 @@ pub const Type = enum { VAL_NULL, VAL_BOOL, VAL_NUMBER, VAL_OBJECT };
 
 /// Tagged union that can hold any of the supported types.
 pub const Value = union(Type) {
+    /// The null value
     VAL_NULL: void,
+    /// The boolean value
     VAL_BOOL: bool,
+    /// The numerical value
     VAL_NUMBER: f64,
+    /// The object value (a pointer to the object field in a function)
     VAL_OBJECT: *Object,
 
+    /// Returns true if the value is of the given type and false otherwise
     pub fn is(self: Value, comptime value_type: Type) bool {
         return switch (self) {
             value_type => true,

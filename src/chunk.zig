@@ -38,8 +38,11 @@ pub const OpCode = enum(u8) {
 };
 
 const Chunk = @This();
+/// The bycode stored in the chunk
 byte_code: std.ArrayList(u8),
+/// The lines corresponding to the bytecode in the chunk
 lines: std.ArrayList(u32),
+/// The constants stored in the chunk
 values: std.ArrayList(Value),
 
 // Initializes a new chunk

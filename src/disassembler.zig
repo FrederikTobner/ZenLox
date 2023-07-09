@@ -51,10 +51,12 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
     offset.* += 1;
 }
 
+/// Disassembles a simple instruction
 fn simpleInstruction(name: []const u8) void {
     std.debug.print("{s}\n", .{name});
 }
 
+/// Disassembles a constant instruction
 fn constantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
     var constantIndex: u8 = chunk.byte_code.items[offset.* + 1];
     std.debug.print("{s} {d} '", .{ name, constantIndex });
@@ -63,6 +65,7 @@ fn constantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
     offset.* += 1;
 }
 
+/// Disassembles a long constant instruction
 fn longConstantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
     var constantIndex: u24 = @intCast(u24, chunk.byte_code.items[offset.* + 1]) << 16;
     constantIndex |= @intCast(u24, chunk.byte_code.items[offset.* + 2]) << 8;
@@ -73,6 +76,7 @@ fn longConstantInstruction(chunk: *Chunk, name: []const u8, offset: *u32) void {
     offset.* += 3;
 }
 
+/// Disassembles a jump instruction
 fn jumpInstruction(chunk: *Chunk, name: []const u8, sign: i8, offset: *u32) void {
     var jump: u16 = @intCast(u16, chunk.byte_code.items[offset.* + 1]) << 8;
     jump |= @intCast(u16, chunk.byte_code.items[offset.* + 2]);

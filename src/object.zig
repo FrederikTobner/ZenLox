@@ -5,8 +5,11 @@ const Value = @import("value.zig").Value;
 
 /// The different types of objects
 pub const ObjectType = enum {
+    /// A string object
     OBJ_STRING,
+    /// A function object
     OBJ_FUNCTION,
+    /// A native function object
     OBJ_NATIVE_FUNCTION,
 };
 

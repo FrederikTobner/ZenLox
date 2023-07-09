@@ -122,7 +122,7 @@ fn makeErrorToken(self: *Lexer, message: []const u8) Token {
 
 /// Determines if the lexer has reached the end of the source string.
 inline fn isAtEnd(self: *Lexer) bool {
-    return @ptrToInt(self.current) == @ptrToInt(&self.source[self.source.len - 1]);
+    return @ptrToInt(self.current) == @ptrToInt(&self.source.ptr[self.source.len]);
 }
 
 /// Determines if the given character is a digit.
@@ -242,7 +242,7 @@ test "Scan Token" {
 }
 
 test "Can handle whitespaces" {
-    var source: []const u8 = " ( ) \x00";
+    var source: []const u8 = " ( ) ";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
     try std.testing.expectEqual(TokenType.TOKEN_LEFT_PARENTHESIZE, token.token_type);
@@ -253,14 +253,14 @@ test "Can handle whitespaces" {
 }
 
 test "Can handle comments" {
-    var source: []const u8 = " // this is a comment\n\x00";
+    var source: []const u8 = " // this is a comment\n";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
     try std.testing.expectEqual(TokenType.TOKEN_EOF, token.token_type);
 }
 
 test "Can handle strings" {
-    var source: []const u8 = "\"zen\"\x00";
+    var source: []const u8 = "\"zen\"";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
     try std.testing.expectEqual(TokenType.TOKEN_STRING, token.token_type);
@@ -268,7 +268,7 @@ test "Can handle strings" {
 }
 
 test "Can scan Numbers" {
-    var source: []const u8 = "123\x00";
+    var source: []const u8 = "123";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
     try std.testing.expectEqual(TokenType.TOKEN_NUMBER, token.token_type);
@@ -276,7 +276,7 @@ test "Can scan Numbers" {
 }
 
 test "Can handle identifiers" {
-    var source: []const u8 = "x y\x00";
+    var source: []const u8 = "x y";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
     try std.testing.expectEqual(TokenType.TOKEN_IDENTIFIER, token.token_type);

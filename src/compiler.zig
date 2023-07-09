@@ -13,23 +13,38 @@ const MemoryMutator = @import("memory_mutator.zig");
 const Disassembler = @import("disassembler.zig");
 
 const Compiler = @This();
+/// The parser used by the compiler
 parser: Parser,
+/// The lexer used by the compiler
 lexer: Lexer,
+/// Boolean indicating whether the printed bytecode should be printed
 print_bytecode: bool = @import("debug_options").printBytecode,
+/// The memory mutator used by the compiler
 memory_mutator: *MemoryMutator = undefined,
+/// The rules used by the compiler
 rules: std.EnumArray(TokenType, ParseRule),
+/// The current compiler context
 compiler_contex: CompilerContex = undefined,
 
+/// The different types of functions
 const FunctionType = enum {
+    /// A function declared in a script
     TYPE_FUNCTION,
+    /// A script
     TYPE_SCRIPT,
 };
 
+/// Models a compiler context
 const CompilerContex = struct {
+    /// The function that is currently being compiled
     object_function: *ObjectFunction = undefined,
+    /// The type of the function that is currently being compiled
     function_type: FunctionType = FunctionType.TYPE_SCRIPT,
+    /// The local variables in the current scope
     locals: [256]Local = undefined,
+    /// The number of local variables in the current scope
     local_count: u8 = 1,
+    /// The depth of the current scope
     scope_depth: u7 = 0,
     /// Creates a new compiler context.
     pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator, function_name: []const u8) !CompilerContex {
@@ -39,6 +54,8 @@ const CompilerContex = struct {
         };
     }
 };
+
+/// The parser used by the compiler
 const Parser = struct {
     current: Token = undefined,
     previous: Token = undefined,
@@ -46,11 +63,13 @@ const Parser = struct {
     panic_mode: bool = false,
 };
 
+/// Models a local variable in a scope
 const Local = struct {
     name: Token = undefined,
     depth: i8 = 0,
 };
 
+/// The precedence of a parsing rule
 const Precedence = enum {
     PREC_NONE,
     PREC_ASSIGNMENT, // =
@@ -65,9 +84,13 @@ const Precedence = enum {
     PREC_PRIMARY,
 };
 
+/// Models a parsing rule
 const ParseRule = struct {
+    /// The prefix function
     prefix: ?*const fn (*Compiler, bool) std.mem.Allocator.Error!void = null,
+    /// The infix function
     infix: ?*const fn (*Compiler, bool) std.mem.Allocator.Error!void = null,
+    /// The precedence of the rule
     precedence: Precedence = Precedence.PREC_NONE,
 };
 
@@ -103,6 +126,7 @@ pub fn init(memory_mutator: *MemoryMutator) !Compiler {
     };
 }
 
+/// Compiles the given source code into a function.
 pub fn compile(self: *Compiler, source: []const u8) !?*ObjectFunction {
     self.lexer = Lexer.init(source);
     self.advance();
@@ -113,6 +137,7 @@ pub fn compile(self: *Compiler, source: []const u8) !?*ObjectFunction {
     return if (self.parser.had_error) null else fun;
 }
 
+/// Compiles a declaration
 fn declaration(self: *Compiler) !void {
     if (self.match(.TOKEN_FUN)) {
         try self.funDeclaration();
@@ -126,6 +151,7 @@ fn declaration(self: *Compiler) !void {
     }
 }
 
+/// Compiles a variable declaration
 fn varDeclaration(self: *Compiler) !void {
     const global: u24 = try self.parseVariable("Expect variable name.");
     if (self.match(.TOKEN_EQUAL)) {
@@ -137,6 +163,7 @@ fn varDeclaration(self: *Compiler) !void {
     try self.defineVariable(global);
 }
 
+/// Compiles a function declaration
 fn funDeclaration(self: *Compiler) !void {
     var global = try self.parseVariable("Expect function name.");
     try self.markInitialized();
@@ -153,6 +180,7 @@ fn markInitialized(self: *Compiler) !void {
     self.compiler_contex.locals[self.compiler_contex.local_count - 1].depth = self.compiler_contex.scope_depth;
 }
 
+/// Compiles a function
 fn function(self: *Compiler, function_type: FunctionType) !void {
     var compiler_contex = try CompilerContex.init(function_type, self.memory_mutator, self.parser.previous.asLexeme());
     compiler_contex.scope_depth = self.compiler_contex.scope_depth;
@@ -188,6 +216,7 @@ fn call(self: *Compiler, can_assign: bool) !void {
     try self.emitByte(arg_count);
 }
 
+/// Compiles a list of arguments
 fn argumentList(self: *Compiler) !u8 {
     var arg_count: u8 = 0;
     if (!self.check(TokenType.TOKEN_RIGHT_PARENTHESIZE)) {
@@ -205,6 +234,8 @@ fn argumentList(self: *Compiler) !u8 {
     self.consume(TokenType.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after arguments.");
     return arg_count;
 }
+
+/// Parses a variable and returns its index in the constant table.
 fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
     self.consume(.TOKEN_IDENTIFIER, error_message);
     try self.declareVariable();
@@ -214,6 +245,7 @@ fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
     return try self.identifierConstant(self.parser.previous);
 }
 
+/// Defines a variable in the current scope.
 fn defineVariable(self: *Compiler, index: u24) !void {
     if (self.compiler_contex.scope_depth > 0) {
         try self.markInitialized();
@@ -222,6 +254,7 @@ fn defineVariable(self: *Compiler, index: u24) !void {
     try self.emitIndexOpcode(index, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG);
 }
 
+/// Declares a variable in the current scope.
 fn declareVariable(self: *Compiler) !void {
     if (self.compiler_contex.scope_depth == 0) {
         return;
@@ -241,6 +274,7 @@ fn declareVariable(self: *Compiler) !void {
     try self.addLocal(name);
 }
 
+/// Checks if two identifiers are equal.
 fn identifiersEqual(a: []const u8, b: []const u8) bool {
     if (a.len != b.len) {
         return false;
@@ -248,6 +282,7 @@ fn identifiersEqual(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
+/// Addsa local variable to the current scope.
 fn addLocal(self: *Compiler, name: Token) !void {
     if (self.compiler_contex.local_count == std.math.maxInt(u8)) {
         self.emitError("Too many local variables in function.");
@@ -258,10 +293,12 @@ fn addLocal(self: *Compiler, name: Token) !void {
     self.compiler_contex.local_count += 1;
 }
 
+/// Creates a constant from a token and returns the index of the constant in the current chunk.
 fn identifierConstant(self: *Compiler, name: Token) !u24 {
     return @intCast(u24, try self.makeConstant(try self.memory_mutator.createStringObjectValue(name.start[0..name.length])));
 }
 
+/// Compiles a statement.
 fn statement(self: *Compiler) !void {
     if (self.match(.TOKEN_PRINT)) {
         try self.printStatement();
@@ -282,12 +319,14 @@ fn statement(self: *Compiler) !void {
     }
 }
 
+/// Compiles a print statement.
 fn printStatement(self: *Compiler) !void {
     try self.expression();
     self.consume(.TOKEN_SEMICOLON, "Expect ';' after value.");
     try self.emitOpcode(OpCode.OP_PRINT);
 }
 
+/// Compiles an if statement.
 fn ifStatement(self: *Compiler) std.mem.Allocator.Error!void {
     self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'if'.");
     try self.expression();
@@ -304,6 +343,7 @@ fn ifStatement(self: *Compiler) std.mem.Allocator.Error!void {
     try self.patchJump(else_jump);
 }
 
+/// Compiles a return statement.
 fn returnStatement(self: *Compiler) !void {
     if (self.compiler_contex.function_type == .TYPE_SCRIPT) {
         self.emitError("Can't return from top-level code.");
@@ -317,6 +357,7 @@ fn returnStatement(self: *Compiler) !void {
     }
 }
 
+/// Compiles a for loop.
 fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
     self.beginScope();
     self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'for'.");
@@ -354,6 +395,7 @@ fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
     try self.endScope();
 }
 
+/// Coompiles a while statement.
 fn whileStatement(self: *Compiler) std.mem.Allocator.Error!void {
     const loop_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
     self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'while'.");
@@ -366,6 +408,7 @@ fn whileStatement(self: *Compiler) std.mem.Allocator.Error!void {
     try self.emitOpcode(.OP_POP);
 }
 
+/// Emits a loop instruction and returns the offset of the jump's operand.
 fn emitLoop(self: *Compiler, loop_start: u16) !void {
     try self.emitOpcode(.OP_LOOP);
     const calculated_offset: usize = self.getCompilingChunk().byte_code.items.len - @intCast(usize, loop_start) + 2;
@@ -377,6 +420,7 @@ fn emitLoop(self: *Compiler, loop_start: u16) !void {
     try self.emitBytes(offset_bytes[0..2]);
 }
 
+/// Emits a jump instruction with the given opcode and returns the offset of the jump's operand.
 fn emitJump(self: *Compiler, opcode: OpCode) !u16 {
     try self.emitOpcode(opcode);
     try self.emitByte(0xff);
@@ -384,6 +428,7 @@ fn emitJump(self: *Compiler, opcode: OpCode) !u16 {
     return @intCast(u16, self.getCompilingChunk().byte_code.items.len - 2);
 }
 
+/// Patches a jump instruction at the given offset.
 fn patchJump(self: *Compiler, offset: u16) !void {
     const jump: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len - offset - 2);
     if (jump > std.math.maxInt(u16)) {
@@ -393,16 +438,19 @@ fn patchJump(self: *Compiler, offset: u16) !void {
     try self.getCompilingChunk().byte_code.replaceRange(offset, 2, jump_bytes[0..]);
 }
 
+/// Compiles an expression statement.
 fn expressionStatement(self: *Compiler) !void {
     try self.expression();
     self.consume(.TOKEN_SEMICOLON, "Expect ';' after expression.");
     try self.emitOpcode(.OP_POP);
 }
 
+/// Compiles a variable reference.
 fn variable(self: *Compiler, can_assign: bool) !void {
     try self.namedVariable(self.parser.previous, can_assign);
 }
 
+/// Compiles a named variable reference.
 fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
     var local: bool = true;
     var arg = try self.resolveLocal(name);
@@ -428,6 +476,7 @@ fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
     }
 }
 
+/// Resolves a local variable.
 fn resolveLocal(self: *Compiler, name: Token) !i64 {
     var counter = self.compiler_contex.local_count;
     while (counter > 0) : (counter -= 1) {
@@ -439,6 +488,7 @@ fn resolveLocal(self: *Compiler, name: Token) !i64 {
     return -1;
 }
 
+/// Compiles a block statement.
 fn block(self: *Compiler) std.mem.Allocator.Error!void {
     while (!self.check(.TOKEN_RIGHT_BRACE) and !self.check(.TOKEN_EOF)) {
         try self.declaration();
@@ -446,6 +496,7 @@ fn block(self: *Compiler) std.mem.Allocator.Error!void {
     self.consume(.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
+/// Compiles an and expression.
 fn andExpression(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const end_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
@@ -454,6 +505,7 @@ fn andExpression(self: *Compiler, can_assign: bool) !void {
     try self.patchJump(end_jump);
 }
 
+/// Compiles an or expression.
 fn orExpression(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const else_jump: u16 = try self.emitJump(OpCode.OP_JUMP_IF_FALSE);
@@ -464,10 +516,12 @@ fn orExpression(self: *Compiler, can_assign: bool) !void {
     try self.patchJump(end_jump);
 }
 
+/// Begins a new scope.
 fn beginScope(self: *Compiler) void {
     self.compiler_contex.scope_depth += 1;
 }
 
+/// Ends the current scope and emits the necessary opcodes to remove the local variables declared in that scope.
 fn endScope(self: *Compiler) !void {
     self.compiler_contex.scope_depth -= 1;
     while (self.compiler_contex.local_count > 0 and self.compiler_contex.locals[self.compiler_contex.local_count - 1].depth > self.compiler_contex.scope_depth) {
@@ -476,10 +530,12 @@ fn endScope(self: *Compiler) !void {
     }
 }
 
+/// Checks if the current token is of the given type.
 fn check(self: *Compiler, token_type: TokenType) bool {
     return self.parser.current.token_type == token_type;
 }
 
+/// Synchronizes the parser after a syntax error.
 fn synchronize(self: *Compiler) void {
     self.parser.panic_mode = false;
     while (self.parser.current.token_type != .TOKEN_EOF) {
@@ -501,6 +557,7 @@ fn synchronize(self: *Compiler) void {
     }
 }
 
+/// Advances the parser to the next token.
 fn advance(self: *Compiler) void {
     self.parser.previous = self.parser.current;
     while (true) {
@@ -512,10 +569,12 @@ fn advance(self: *Compiler) void {
     }
 }
 
+/// Compiles a expression.
 fn expression(self: *Compiler) !void {
     try self.parsePrecedence(.PREC_ASSIGNMENT);
 }
 
+/// Compiles a numeric literal.
 fn number(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const num = std.fmt.parseFloat(f64, self.parser.previous.asLexeme()) catch {
@@ -525,6 +584,7 @@ fn number(self: *Compiler, can_assign: bool) !void {
     try self.emitConstant(Value{ .VAL_NUMBER = num });
 }
 
+/// Compiles a literal expression.
 fn literal(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     switch (self.parser.previous.token_type) {
@@ -535,27 +595,32 @@ fn literal(self: *Compiler, can_assign: bool) !void {
     }
 }
 
+/// Compiles a string literal.
 fn string(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const lexeme = self.parser.previous.asLexeme();
     try self.emitConstant(try self.memory_mutator.createStringObjectValue(lexeme[1 .. lexeme.len - 1]));
 }
 
+/// Emits a constant instruction and its index in the current chunk.
 fn emitConstant(self: *Compiler, value: Value) !void {
     const index = try self.makeConstant(value);
     try self.emitIndexOpcode(index, .OP_CONSTANT, .OP_CONSTANT_LONG);
 }
 
+/// Creates a constant in the current chunk and returns its index.
 inline fn makeConstant(self: *Compiler, value: Value) !usize {
     return @intCast(u24, try self.getCompilingChunk().addConstant(value));
 }
 
+/// Compiles a grouping expression.
 fn grouping(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     try self.expression();
     self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after expression.");
 }
 
+/// Compiles a unary operator.
 fn unary(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const operator_type = self.parser.previous.token_type;
@@ -567,6 +632,7 @@ fn unary(self: *Compiler, can_assign: bool) !void {
     }
 }
 
+/// Compiles a binary operator.
 fn binary(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const token_type = self.parser.previous.token_type;
@@ -587,6 +653,7 @@ fn binary(self: *Compiler, can_assign: bool) !void {
     }
 }
 
+/// Returns the parsing rule for the given token type
 inline fn getRule(self: *Compiler, token_type: TokenType) ParseRule {
     return self.rules.get(token_type);
 }
@@ -616,6 +683,7 @@ fn parsePrecedence(self: *Compiler, precedence: Precedence) !void {
     }
 }
 
+/// Consumes the current token if it matches the given type, otherwise emits an error.
 fn consume(self: *Compiler, token_type: TokenType, message: []const u8) void {
     if (self.parser.current.token_type == token_type) {
         self.advance();
@@ -624,6 +692,7 @@ fn consume(self: *Compiler, token_type: TokenType, message: []const u8) void {
     self.emitErrorAtCurrent(message);
 }
 
+/// Matches the current token with the given type and advances the parser if it matches.
 fn match(self: *Compiler, token_type: TokenType) bool {
     if (self.parser.current.token_type != token_type) {
         return false;
@@ -632,14 +701,17 @@ fn match(self: *Compiler, token_type: TokenType) bool {
     return true;
 }
 
+/// Emits an error at the current token.
 inline fn emitError(self: *Compiler, message: []const u8) void {
     self.emitErrorAtCurrent(message);
 }
 
+/// Emits an error at the current token.
 inline fn emitErrorAtCurrent(self: *Compiler, message: []const u8) void {
     self.emitErrorAt(&self.parser.current, message);
 }
 
+/// Emits an error at the given token.
 fn emitErrorAt(self: *Compiler, token: *Token, message: []const u8) void {
     if (self.parser.panic_mode) {
         return;
@@ -657,16 +729,19 @@ fn emitErrorAt(self: *Compiler, token: *Token, message: []const u8) void {
     self.parser.had_error = true;
 }
 
+/// Emits the given byte to the current chunk.
 inline fn emitByte(self: *Compiler, byte: u8) !void {
     try self.getCompilingChunk().writeByte(byte, self.parser.previous.line);
 }
 
+/// Emits the given bytes to the current chunk.
 fn emitBytes(self: *Compiler, bytes: []const u8) !void {
     for (bytes) |byte| {
         try self.emitByte(byte);
     }
 }
 
+/// Emits an index opcode. If the index is greater than the max u8, it will emit the long opcode.
 fn emitIndexOpcode(self: *Compiler, index: usize, short_opcode: OpCode, long_opcode: OpCode) !void {
     if (index > @intCast(usize, std.math.maxInt(u24))) {
         self.emitError("Too many constants in one chunk.");
@@ -684,20 +759,24 @@ fn emitIndexOpcode(self: *Compiler, index: usize, short_opcode: OpCode, long_opc
     }
 }
 
-inline fn emitOpcode(self: *Compiler, op_code: OpCode) !void {
+/// Emits the given opcode.
+inline fn emitOpcode(self: *Compiler, comptime op_code: OpCode) !void {
     try self.emitByte(@enumToInt(op_code));
 }
 
-fn emitOpcodes(self: *Compiler, op_codes: []const OpCode) !void {
+/// Emits the given opcodes.
+fn emitOpcodes(self: *Compiler, comptime op_codes: []const OpCode) !void {
     for (op_codes) |op_code| {
         try self.emitByte(@enumToInt(op_code));
     }
 }
 
+/// Emits a return opcode.
 inline fn emitReturn(self: *Compiler) !void {
     try self.emitOpcode(.OP_RETURN);
 }
 
+/// Ends the current compiler context and returns the compiled function.
 inline fn endCompilerContext(self: *Compiler) !*ObjectFunction {
     try self.emitReturn();
     if (self.print_bytecode) {
@@ -707,6 +786,7 @@ inline fn endCompilerContext(self: *Compiler) !*ObjectFunction {
     return self.compiler_contex.object_function;
 }
 
+/// Returns the current compiling chunk.
 inline fn getCompilingChunk(self: *Compiler) *Chunk {
     return &self.compiler_contex.object_function.chunk;
 }

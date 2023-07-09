@@ -12,8 +12,8 @@ fn variableBasedTest(comptime code: []const u8, expectedValue: Value) !void {
     defer _ = general_purpose_allocator.deinit();
     var memory_mutator = MemoryMutator.init(allocator);
     var virtual_machine = try VirtualMachine.init(&writer, &memory_mutator);
-    try virtual_machine.interpret(code ++ " ");
     defer virtual_machine.deinit();
+    try virtual_machine.interpret(code ++ " ");
     try std.testing.expect(1 <= virtual_machine.memory_mutator.globals.count);
     var value = virtual_machine.memory_mutator.globals.getWithChars("i", FNV1a.hash("i"));
     try std.testing.expect(value != null);
@@ -78,4 +78,15 @@ test "for" {
 
 test "fun" {
     try variableBasedTest("fun add(a, b) { return a + b; } var i = add(1, 2);", Value{ .VAL_NUMBER = 3 });
+}
+
+test "return at top level" {
+    var writer = std.io.getStdOut().writer();
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = general_purpose_allocator.allocator();
+    defer _ = general_purpose_allocator.deinit();
+    var memory_mutator = MemoryMutator.init(allocator);
+    var virtual_machine = try VirtualMachine.init(&writer, &memory_mutator);
+    defer virtual_machine.deinit();
+    try std.testing.expectError(error.CompileError, virtual_machine.interpret("return 1; "));
 }
