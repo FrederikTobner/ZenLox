@@ -11,6 +11,10 @@ pub const ObjectType = enum {
     OBJ_FUNCTION,
     /// A native function object
     OBJ_NATIVE_FUNCTION,
+    /// A closure object
+    OBJ_CLOSURE,
+    /// An upvalue object
+    OBJ_UPVALUE,
 };
 
 /// Base object type
@@ -33,8 +37,32 @@ pub const Object = struct {
             .OBJ_STRING => return self == other,
             // We could compare the bytecode, but that would be a lot of work
             .OBJ_FUNCTION => return self == other,
-            // Native functions are  equal
+            // Native functions are equal if they have the same function pointer
             .OBJ_NATIVE_FUNCTION => return self == other,
+            // Closures are equal if they have the same function and upvalues
+            .OBJ_CLOSURE => {
+                const self_closure = self.as(ObjectClosure);
+                const other_closure = other.as(ObjectClosure);
+                if (self_closure.function != other_closure.function) {
+                    return false;
+                }
+                if (self_closure.upvalues.len != other_closure.upvalues.len) {
+                    return false;
+                }
+                for (self_closure.upvalues) |self_upvalue, i| {
+                    const other_upvalue = other_closure.upvalues[i];
+                    if (self_upvalue != other_upvalue) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+            // Upvalues are equal if the underlying value is equal
+            .OBJ_UPVALUE => {
+                const self_upvalue = self.as(ObjectUpvalue);
+                const other_upvalue = other.as(ObjectUpvalue);
+                return self_upvalue.closed.isEqual(other_upvalue.closed);
+            },
         }
     }
 
@@ -44,6 +72,8 @@ pub const Object = struct {
             .OBJ_STRING => try self.as(ObjectString).print(writer),
             .OBJ_FUNCTION => try self.as(ObjectFunction).print(writer),
             .OBJ_NATIVE_FUNCTION => try self.as(ObjectNativeFunction).print(writer),
+            .OBJ_CLOSURE => try self.as(ObjectClosure).print(writer),
+            .OBJ_UPVALUE => try self.as(ObjectUpvalue).print(writer),
         }
     }
 
@@ -53,6 +83,8 @@ pub const Object = struct {
             .OBJ_STRING => self.as(ObjectString).printDebug(),
             .OBJ_FUNCTION => self.as(ObjectFunction).printDebug(),
             .OBJ_NATIVE_FUNCTION => self.as(ObjectNativeFunction).printDebug(),
+            .OBJ_CLOSURE => self.as(ObjectClosure).function.printDebug(),
+            .OBJ_UPVALUE => self.as(ObjectUpvalue).location.printDebug(),
         }
     }
 };
@@ -124,5 +156,47 @@ pub const ObjectNativeFunction = struct {
     pub fn printDebug(self: *ObjectNativeFunction) void {
         _ = self;
         std.debug.print("<native fn>", .{});
+    }
+};
+
+pub const ObjectClosure = struct {
+    /// The base object
+    object: Object,
+    /// The function that was closed over
+    function: *ObjectFunction,
+    /// The upvalues that were closed over
+    upvalues: []*ObjectUpvalue,
+
+    /// Prints the closure to stdout using the given `std.fs.File.Writer`
+    pub fn print(self: *ObjectClosure, writer: *const std.fs.File.Writer) !void {
+        try self.function.print(writer);
+    }
+
+    /// Print the closure to stderr - only for debugging
+    pub fn printDebug(self: *ObjectClosure) void {
+        self.function.printDebug();
+    }
+};
+
+pub const ObjectUpvalue = struct {
+    /// The base object
+    object: Object,
+    /// The location of the upvalue
+    location: *Value,
+    /// The value of the upvalue
+    closed: Value,
+    /// The next upvalue in the linked list
+    next: *ObjectUpvalue,
+
+    /// Prints the upvalue to stdout using the given `std.fs.File.Writer`
+    pub fn print(self: *ObjectUpvalue, writer: *const std.fs.File.Writer) !void {
+        _ = self;
+        try writer.print("upvalue", .{});
+    }
+
+    /// Print the upvalue to stderr - only for debugging
+    pub fn printDebug(self: *ObjectUpvalue) void {
+        _ = self;
+        std.debug.print("upvalue", .{});
     }
 };

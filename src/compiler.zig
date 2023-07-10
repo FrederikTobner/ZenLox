@@ -236,7 +236,7 @@ fn argumentList(self: *Compiler) !u8 {
 }
 
 /// Parses a variable and returns its index in the constant table.
-fn parseVariable(self: *Compiler, error_message: []const u8) !u24 {
+fn parseVariable(self: *Compiler, comptime error_message: []const u8) !u24 {
     self.consume(.TOKEN_IDENTIFIER, error_message);
     try self.declareVariable();
     if (self.compiler_contex.scope_depth > 0) {
@@ -565,7 +565,7 @@ fn advance(self: *Compiler) void {
         if (self.parser.current.token_type != .TOKEN_ERROR) {
             break;
         }
-        self.emitErrorAtCurrent(self.parser.current.asLexeme());
+        self.emitErrorAtCurrent("Invalid token.");
     }
 }
 
@@ -684,7 +684,7 @@ fn parsePrecedence(self: *Compiler, precedence: Precedence) !void {
 }
 
 /// Consumes the current token if it matches the given type, otherwise emits an error.
-fn consume(self: *Compiler, token_type: TokenType, message: []const u8) void {
+fn consume(self: *Compiler, token_type: TokenType, comptime message: []const u8) void {
     if (self.parser.current.token_type == token_type) {
         self.advance();
         return;
@@ -702,17 +702,17 @@ fn match(self: *Compiler, token_type: TokenType) bool {
 }
 
 /// Emits an error at the current token.
-inline fn emitError(self: *Compiler, message: []const u8) void {
+inline fn emitError(self: *Compiler, comptime message: []const u8) void {
     self.emitErrorAtCurrent(message);
 }
 
 /// Emits an error at the current token.
-inline fn emitErrorAtCurrent(self: *Compiler, message: []const u8) void {
-    self.emitErrorAt(&self.parser.current, message);
+inline fn emitErrorAtCurrent(self: *Compiler, comptime message: []const u8) void {
+    self.emitErrorAt(&self.parser.previous, message);
 }
 
 /// Emits an error at the given token.
-fn emitErrorAt(self: *Compiler, token: *Token, message: []const u8) void {
+fn emitErrorAt(self: *Compiler, token: *Token, comptime message: []const u8) void {
     if (self.parser.panic_mode) {
         return;
     }

@@ -45,8 +45,8 @@ lines: std.ArrayList(u32),
 /// The constants stored in the chunk
 values: std.ArrayList(Value),
 
-// Initializes a new chunk
-// Every chunk needs to be deinitialized with `deinit` after it's no longer needed
+/// Initializes a new chunk
+/// Every chunk needs to be deinitialized with `deinit` after it's no longer needed
 pub fn init(allocator: std.mem.Allocator) Chunk {
     return Chunk{
         .byte_code = std.ArrayList(u8).init(allocator),
@@ -55,34 +55,34 @@ pub fn init(allocator: std.mem.Allocator) Chunk {
     };
 }
 
-// Deinitializes the chunk
+/// Deinitializes the chunk
 pub fn deinit(self: *Chunk) void {
     self.byte_code.deinit();
     self.lines.deinit();
     self.values.deinit();
 }
 
-// Appends an opcode to the chunk
+/// Appends an opcode to the chunk
 pub fn writeOpCode(self: *Chunk, byte: OpCode, line: u32) !void {
     try self.lines.append(line);
     try self.byte_code.append(@enumToInt(byte));
 }
 
-// Appends a byte to the chunk
+/// Appends a byte to the chunk
 pub fn writeByte(self: *Chunk, byte: u8, line: u32) !void {
     try self.lines.append(line);
     try self.byte_code.append(byte);
 }
 
-// Appends a 24 bit unsigned integer to the chunk (also called sword, for short word)
+/// Appends a 24 bit unsigned integer to the chunk (also called sword, for short word)
 pub fn writeShortWord(self: *Chunk, sword: u24, line: u32) !void {
     const shiftValues = [_]u8{ 16, 8, 0 };
-    for (shiftValues) |shift| {
+    inline for (shiftValues) |shift| {
         try self.writeByte(@intCast(u8, sword >> shift), line);
     }
 }
 
-// Adds a constant to the chunk
+/// Adds a constant to the chunk
 pub fn addConstant(self: *Chunk, value: Value) !usize {
     try self.values.append(value);
     return self.values.items.len - 1;

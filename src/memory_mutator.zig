@@ -7,6 +7,8 @@ const ObjectType = @import("object.zig").ObjectType;
 const ObjectString = @import("object.zig").ObjectString;
 const ObjectFunction = @import("object.zig").ObjectFunction;
 const ObjectNativeFunction = @import("object.zig").ObjectNativeFunction;
+const ObjectClosure = @import("object.zig").ObjectClosure;
+const ObjectUpvalue = @import("object.zig").ObjectUpvalue;
 const NativeFunctions = @import("native_functions.zig");
 const Table = @import("table.zig");
 const Value = @import("value.zig").Value;
@@ -60,6 +62,8 @@ pub fn deinit(self: *MemoryMutator) !void {
             .OBJ_STRING => try self.destroyStringObject(object.as(ObjectString)),
             .OBJ_FUNCTION => try self.destroyFunctionObject(object.as(ObjectFunction)),
             .OBJ_NATIVE_FUNCTION => try self.destroyNativeFunctionObject(object.as(ObjectNativeFunction)),
+            .OBJ_CLOSURE => try self.destroyClosureObject(object.as(ObjectClosure)),
+            .OBJ_UPVALUE => try self.destroyUpvalueObject(object.as(ObjectUpvalue)),
         }
     }
     self.objects.deinit();
@@ -123,14 +127,25 @@ pub fn destroyStringObject(self: *MemoryMutator, string_object: *ObjectString) !
     self.allocator.destroy(string_object);
 }
 
-/// Free's the memory allocated for the given ObjectString
+/// Free's the memory allocated for the given Function
 pub fn destroyFunctionObject(self: *MemoryMutator, function_object: *ObjectFunction) !void {
     function_object.chunk.deinit();
     self.allocator.free(function_object.name);
     self.allocator.destroy(function_object);
 }
 
-/// Free's the memory allocated for the given ObjectString
+/// Free's the memory allocated for the given native Function
 pub fn destroyNativeFunctionObject(self: *MemoryMutator, function_object: *ObjectNativeFunction) !void {
     self.allocator.destroy(function_object);
+}
+
+/// Free's the memory allocated for the given ObjectString
+pub fn destroyClosureObject(self: *MemoryMutator, closure_object: *ObjectClosure) !void {
+    try self.destroyFunctionObject(closure_object.function);
+}
+
+/// Free's the memory allocated for the given upvalue
+pub fn destroyUpvalueObject(self: *MemoryMutator, upvalue_object: *ObjectUpvalue) !void {
+    _ = self;
+    _ = upvalue_object;
 }
