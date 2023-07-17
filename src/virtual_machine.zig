@@ -6,9 +6,11 @@ const Disassembler = @import("disassembler.zig");
 const MemoryMutator = @import("memory_mutator.zig");
 const NativeFunctions = @import("native_functions.zig");
 const Object = @import("object.zig").Object;
-const ObjectString = @import("object.zig").ObjectString;
+const ObjectClosure = @import("object.zig").ObjectClosure;
 const ObjectFunction = @import("object.zig").ObjectFunction;
 const ObjectNativeFunction = @import("object.zig").ObjectNativeFunction;
+const ObjectString = @import("object.zig").ObjectString;
+const ObjectUpvalue = @import("object.zig").ObjectUpvalue;
 const ObjectType = @import("object.zig").ObjectType;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
@@ -24,16 +26,16 @@ pub const InterpreterError = error{
 /// Models a call frame of the virtual machine.
 const CallFrame = struct {
     /// The function that is being called.
-    function: *ObjectFunction,
+    closure: *ObjectClosure,
     /// The index of the instruction that is being executed.
     instruction_index: u32 = undefined,
     /// The slots for the call frame.
     slots: [*]Value,
     /// Initializes a call frame.
-    pub fn init(function: *ObjectFunction, slots: [*]Value, instruction_index: u32) CallFrame {
+    pub fn init(closure: *ObjectClosure, slots: [*]Value, instruction_index: u32) CallFrame {
         return CallFrame{
             .slots = slots,
-            .function = function,
+            .closure = closure,
             .instruction_index = instruction_index,
         };
     }
@@ -112,8 +114,9 @@ pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
     self.value_stack.resetStack();
     const function = try self.compiler.compile(source);
     if (function) |fun| {
-        self.call_frames[self.frame_count] = CallFrame.init(fun, self.value_stack.stack_top, if (self.frame_count == 0) 0 else self.call_frames[self.frame_count - 1].instruction_index);
-        try self.value_stack.push(Value{ .VAL_OBJECT = &fun.object });
+        const closure = try self.memory_mutator.createClosure(fun);
+        self.call_frames[self.frame_count] = CallFrame.init(closure, self.value_stack.stack_top, if (self.frame_count == 0) 0 else self.call_frames[self.frame_count - 1].instruction_index);
+        try self.value_stack.push(Value{ .VAL_OBJECT = &closure.object });
         self.frame_count = 1;
         try self.run();
     } else {
@@ -133,6 +136,11 @@ fn run(self: *VirtualMachine) !void {
                 var arg_count = self.currentChunk().byte_code.items[self.currentFrame().instruction_index];
                 _ = try self.callValue((self.value_stack.stack_top - arg_count - 1)[0], arg_count);
             },
+            .OP_CLOSURE => {
+                const function = self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectFunction);
+                const closure = try self.memory_mutator.createClosure(function);
+                try self.value_stack.push(Value{ .VAL_OBJECT = &closure.object });
+            },
             .OP_CONSTANT => try self.value_stack.push(self.currentChunk().values.items[self.readByte()]),
             .OP_CONSTANT_LONG => try self.value_stack.push(self.currentChunk().values.items[self.readShortWord()]),
             .OP_DEFINE_GLOBAL => try self.defineGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
@@ -143,6 +151,10 @@ fn run(self: *VirtualMachine) !void {
             .OP_GET_GLOBAL => try self.getGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
             .OP_GET_GLOBAL_LONG => try self.getGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
             .OP_GET_LOCAL => try self.value_stack.push(self.currentFrame().slots[self.readByte()]),
+            .OP_GET_UPVALUE => {
+                const slot = self.readByte();
+                try self.value_stack.push(self.currentFrame().closure.upvalues.?[slot].closed);
+            },
             .OP_GREATER => try self.binaryOperation(.OP_GREATER),
             .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
             .OP_JUMP => {
@@ -184,6 +196,10 @@ fn run(self: *VirtualMachine) !void {
             .OP_SET_GLOBAL => try self.setGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
             .OP_SET_GLOBAL_LONG => try self.setGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
             .OP_SET_LOCAL => self.value_stack.items[self.readByte()] = self.value_stack.peek(0),
+            .OP_SET_UPVALUE => {
+                const slot = self.readByte();
+                self.currentFrame().closure.upvalues.?[slot].closed = self.value_stack.peek(0);
+            },
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
             .OP_TRUE => try self.value_stack.push(Value{ .VAL_BOOL = true }),
         }
@@ -298,7 +314,7 @@ inline fn setGlobal(self: *VirtualMachine, name: *ObjectString) !void {
 
 /// Gets the current chunk.
 inline fn currentChunk(self: *VirtualMachine) *Chunk {
-    return &self.currentFrame().function.chunk;
+    return &self.currentFrame().closure.function.chunk;
 }
 
 /// Gets the current call frame.
@@ -314,9 +330,9 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
     var counter = self.frame_count - 1;
     while (counter > 0) {
         var frame = &self.call_frames[counter];
-        std.debug.print("called from line {d}", .{frame.function.chunk.lines.items[frame.instruction_index]});
+        std.debug.print("called from line {d}", .{frame.closure.function.chunk.lines.items[frame.instruction_index]});
         if (counter != 1) {
-            std.debug.print(" in function '{s}'\n", .{frame.function.name});
+            std.debug.print(" in function '{s}'\n", .{frame.closure.function.name});
         } else {
             std.debug.print(" in function 'main'\n", .{});
         }
@@ -325,12 +341,17 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
     return error.RuntimeError;
 }
 
+fn captureUpvalue(self: *VirtualMachine, local: *Value) *ObjectUpvalue {
+    var created_upvalue = self.memory_mutator.createUpvalue(local);
+    return created_upvalue;
+}
+
 /// Calls a value, either a function or a native function.
 fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {
     switch (callee) {
         .VAL_OBJECT => {
             switch (callee.VAL_OBJECT.object_type) {
-                .OBJ_FUNCTION => return self.call(callee.VAL_OBJECT.as(ObjectFunction), arg_count),
+                .OBJ_CLOSURE => return self.call(callee.VAL_OBJECT.as(ObjectClosure), arg_count),
                 .OBJ_NATIVE_FUNCTION => return self.callNative(callee.VAL_OBJECT.as(ObjectNativeFunction), arg_count),
                 else => {},
             }
@@ -342,15 +363,15 @@ fn callValue(self: *VirtualMachine, callee: Value, arg_count: u8) !bool {
 }
 
 /// Calls a function.
-fn call(self: *VirtualMachine, function: *ObjectFunction, arg_count: u8) !bool {
-    if (arg_count != function.arity) {
-        try self.reportRunTimeError("Expected {d} arguments but got {d}", .{ function.arity, arg_count });
+fn call(self: *VirtualMachine, closure: *ObjectClosure, arg_count: u8) !bool {
+    if (arg_count != closure.function.arity) {
+        try self.reportRunTimeError("Expected {d} arguments but got {d}", .{ closure.function.arity, arg_count });
     }
     if (self.frame_count == 255) {
         try self.reportRunTimeError("Stack overflow", .{});
     }
     self.currentFrame().instruction_index += 1;
-    self.call_frames[self.frame_count] = CallFrame.init(function, self.value_stack.stack_top - arg_count - 1, 0);
+    self.call_frames[self.frame_count] = CallFrame.init(closure, self.value_stack.stack_top - arg_count - 1, 0);
     self.frame_count += 1;
     return true;
 }

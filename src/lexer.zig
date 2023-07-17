@@ -226,30 +226,31 @@ inline fn distance(self: *Lexer) usize {
     return @ptrToInt(self.current) - @ptrToInt(self.start);
 }
 
+// Tests
+
+fn expectTokenEquality(token: *Token, expectedLexeme: []const u8, expectedTokenType: TokenType) !void {
+    try std.testing.expectEqual(expectedTokenType, token.token_type);
+    try std.testing.expectEqualSlices(u8, expectedLexeme, token.asLexeme());
+}
+
 test "Scan Token" {
     var source: []const u8 = "()!=\x00";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_LEFT_PARENTHESIZE, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[0..1], token.asLexeme());
+    try expectTokenEquality(&token, source[0..1], .TOKEN_LEFT_PARENTHESIZE);
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_RIGHT_PARENTHESIZE, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[1..2], token.asLexeme());
+    try expectTokenEquality(&token, source[1..2], .TOKEN_RIGHT_PARENTHESIZE);
     token = lexer.scanToken();
-    std.debug.print("token: {}\n", .{token.token_type});
-    try std.testing.expectEqual(TokenType.TOKEN_BANG_EQUAL, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[2..4], token.asLexeme());
+    try expectTokenEquality(&token, source[2..4], .TOKEN_BANG_EQUAL);
 }
 
 test "Can handle whitespaces" {
     var source: []const u8 = " ( ) ";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_LEFT_PARENTHESIZE, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[1..2], token.asLexeme());
+    try expectTokenEquality(&token, source[1..2], .TOKEN_LEFT_PARENTHESIZE);
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_RIGHT_PARENTHESIZE, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[3..4], token.asLexeme());
+    try expectTokenEquality(&token, source[3..4], .TOKEN_RIGHT_PARENTHESIZE);
 }
 
 test "Can handle comments" {
@@ -263,25 +264,21 @@ test "Can handle strings" {
     var source: []const u8 = "\"zen\"";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_STRING, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[0..5], token.asLexeme());
+    try expectTokenEquality(&token, source[0..5], .TOKEN_STRING);
 }
 
 test "Can scan Numbers" {
     var source: []const u8 = "123";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_NUMBER, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[0..3], token.asLexeme());
+    try expectTokenEquality(&token, source[0..3], .TOKEN_NUMBER);
 }
 
 test "Can handle identifiers" {
     var source: []const u8 = "x y";
     var lexer = Lexer.init(source);
     var token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_IDENTIFIER, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[0..1], token.asLexeme());
+    try expectTokenEquality(&token, source[0..1], .TOKEN_IDENTIFIER);
     token = lexer.scanToken();
-    try std.testing.expectEqual(TokenType.TOKEN_IDENTIFIER, token.token_type);
-    try std.testing.expectEqualSlices(u8, source[2..3], token.asLexeme());
+    try expectTokenEquality(&token, source[2..3], .TOKEN_IDENTIFIER);
 }

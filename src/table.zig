@@ -176,7 +176,7 @@ fn growCapacy(self: *Table) usize {
 }
 
 test "Can get entries" {
-    var table = Table.init(std.heap.page_allocator);
+    var table = Table.init(std.testing.allocator);
     defer table.deinit();
     var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
     var value = Value{ .VAL_NUMBER = 1234.0 };
@@ -185,19 +185,28 @@ test "Can get entries" {
     try std.testing.expectEqual(value, returned_value.?);
 }
 
-test "Can remove Entry" {
-    var table = Table.init(std.heap.page_allocator);
+test "Can find entry using character sequence" {
+    var table = Table.init(std.testing.allocator);
     defer table.deinit();
     var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
     var value = Value{ .VAL_NUMBER = 1234.0 };
     _ = try table.set(&key, value);
+    var returned_value = table.getWithChars("key", 123);
+    try std.testing.expectEqual(value, returned_value.?);
+}
+
+test "Can remove Entry" {
+    var table = Table.init(std.testing.allocator);
+    defer table.deinit();
+    var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
+    _ = try table.set(&key, Value{ .VAL_NUMBER = 1234.0 });
     _ = table.delete(&key);
     var returned_value = table.get(&key);
     try std.testing.expect(null == returned_value);
 }
 
 test "Can find entry after adjusting capacity" {
-    var table = Table.init(std.heap.page_allocator);
+    var table = Table.init(std.testing.allocator);
     defer table.deinit();
     var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
     var value = Value{ .VAL_NUMBER = 1234.0 };

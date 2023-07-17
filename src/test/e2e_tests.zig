@@ -7,12 +7,9 @@ const Value = @import("../value.zig").Value;
 const MemoryMutator = @import("../memory_mutator.zig");
 
 /// Tests if the given code produces the expected value.
-fn variableBasedTest(comptime code: []const u8, expectedValue: Value) !void {
+fn globalVariableBasedTest(comptime code: []const u8, expectedValue: Value) !void {
     var writer = std.io.getStdOut().writer();
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = general_purpose_allocator.allocator();
-    defer _ = general_purpose_allocator.deinit();
-    var memory_mutator = MemoryMutator.init(allocator);
+    var memory_mutator = MemoryMutator.init(std.testing.allocator);
     var virtual_machine = try VirtualMachine.init(&writer, &memory_mutator);
     defer virtual_machine.deinit();
     try virtual_machine.interpret(code);
@@ -24,73 +21,80 @@ fn variableBasedTest(comptime code: []const u8, expectedValue: Value) !void {
 /// Tests if the given code produces the expected error.
 fn errorProducingTest(comptime code: []const u8, comptime expected_error: InterpreterError) !void {
     var writer = std.io.getStdOut().writer();
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = general_purpose_allocator.allocator();
-    defer _ = general_purpose_allocator.deinit();
-    var memory_mutator = MemoryMutator.init(allocator);
+    var memory_mutator = MemoryMutator.init(std.testing.allocator);
     var virtual_machine = try VirtualMachine.init(&writer, &memory_mutator);
     defer virtual_machine.deinit();
     try std.testing.expectError(expected_error, virtual_machine.interpret(code));
 }
 
 test "Addition" {
-    try variableBasedTest("var i = 3 + 2;", Value{ .VAL_NUMBER = 5 });
+    try globalVariableBasedTest("var i = 3 + 2;", Value{ .VAL_NUMBER = 5 });
 }
 
 test "Subtraction" {
-    try variableBasedTest("var i = 3 - 2;", Value{ .VAL_NUMBER = 1 });
+    try globalVariableBasedTest("var i = 3 - 2;", Value{ .VAL_NUMBER = 1 });
 }
 
 test "Multiplication" {
-    try variableBasedTest("var i = 3 * 2;", Value{ .VAL_NUMBER = 6 });
+    try globalVariableBasedTest("var i = 3 * 2;", Value{ .VAL_NUMBER = 6 });
 }
 
 test "Division" {
-    try variableBasedTest("var i = 3 / 2;", Value{ .VAL_NUMBER = 1.5 });
+    try globalVariableBasedTest("var i = 3 / 2;", Value{ .VAL_NUMBER = 1.5 });
 }
 
 test "Greater" {
-    try variableBasedTest("var i = 3 > 2;", Value{ .VAL_BOOL = true });
+    try globalVariableBasedTest("var i = 3 > 2;", Value{ .VAL_BOOL = true });
 }
 
 test "Greater Equal" {
-    try variableBasedTest("var i = 3 >= 2;", Value{ .VAL_BOOL = true });
+    try globalVariableBasedTest("var i = 3 >= 2;", Value{ .VAL_BOOL = true });
 }
 
 test "Less" {
-    try variableBasedTest("var i = 3 < 2;", Value{ .VAL_BOOL = false });
+    try globalVariableBasedTest("var i = 3 < 2;", Value{ .VAL_BOOL = false });
 }
 
 test "Less Equal" {
-    try variableBasedTest("var i = 3 <= 2;", Value{ .VAL_BOOL = false });
+    try globalVariableBasedTest("var i = 3 <= 2;", Value{ .VAL_BOOL = false });
 }
 
 test "Can define global" {
-    try variableBasedTest("var i = 5;", Value{ .VAL_NUMBER = 5 });
+    try globalVariableBasedTest("var i = 5;", Value{ .VAL_NUMBER = 5 });
 }
 
 test "if statement" {
-    try variableBasedTest("var i = 0; if (true) i = 1;", Value{ .VAL_NUMBER = 1 });
+    try globalVariableBasedTest("var i = 0; if (true) i = 1;", Value{ .VAL_NUMBER = 1 });
 }
 
 test "if else" {
-    try variableBasedTest("var i = 0; if (false) i = 1; else i = 2;", Value{ .VAL_NUMBER = 2 });
+    try globalVariableBasedTest("var i = 0; if (false) i = 1; else i = 2;", Value{ .VAL_NUMBER = 2 });
 }
 
 test "else if" {
-    try variableBasedTest("var i = 0; if (false) i = 1; else if (true) i = 2; else i = 3;", Value{ .VAL_NUMBER = 2 });
+    try globalVariableBasedTest("var i = 0; if (false) i = 1; else if (true) i = 2; else i = 3;", Value{ .VAL_NUMBER = 2 });
 }
 
 test "while" {
-    try variableBasedTest("var i = 0; while(i < 3) {i = i + 1;} ", Value{ .VAL_NUMBER = 3 });
+    try globalVariableBasedTest("var i = 0; while(i < 3) {i = i + 1;} ", Value{ .VAL_NUMBER = 3 });
 }
 
 test "for" {
-    try variableBasedTest("var i = 0; for(var counter = 0; counter < 3; counter = counter + 1) {i = counter;} ", Value{ .VAL_NUMBER = 2 });
+    try globalVariableBasedTest("var i = 0; for(var counter = 0; counter < 3; counter = counter + 1) {i = counter;} ", Value{ .VAL_NUMBER = 2 });
 }
 
-test "fun" {
-    try variableBasedTest("fun add(a, b) { return a + b; } var i = add(1, 2);", Value{ .VAL_NUMBER = 3 });
+test "function" {
+    try globalVariableBasedTest("fun add(a, b) { return a + b; } var i = add(1, 2);", Value{ .VAL_NUMBER = 3 });
+}
+
+test "function with global upvalue" {
+    try globalVariableBasedTest("var i = 3; fun inc() {i = i + 1;} inc();", Value{ .VAL_NUMBER = 4 });
+}
+
+// Errors
+
+test "undefined variable" {
+    try errorProducingTest("i = 5;", InterpreterError.RuntimeError);
 }
 
 test "return at top level" {

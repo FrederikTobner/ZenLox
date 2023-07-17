@@ -34,14 +34,16 @@ pub fn build(b: *std.build.Builder) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
+    // Custom step to run ZenLox
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Adding a custom step to run the tests
+    // The executable for running the tests
     const exe_tests = b.addTest("test.zig");
     exe_tests.addOptions("debug_options", debug_options);
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
+    // Adding a custom step to run the tests
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);
 }

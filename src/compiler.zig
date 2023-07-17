@@ -1,7 +1,9 @@
 const std = @import("std");
 
 const Chunk = @import("chunk.zig");
+const Disassembler = @import("disassembler.zig");
 const Lexer = @import("lexer.zig");
+const MemoryMutator = @import("memory_mutator.zig");
 const Object = @import("object.zig").Object;
 const ObjectFunction = @import("object.zig").ObjectFunction;
 const ObjectString = @import("object.zig").ObjectString;
@@ -9,8 +11,6 @@ const OpCode = @import("chunk.zig").OpCode;
 const TokenType = @import("token.zig").TokenType;
 const Token = @import("token.zig");
 const Value = @import("value.zig").Value;
-const MemoryMutator = @import("memory_mutator.zig");
-const Disassembler = @import("disassembler.zig");
 
 const Compiler = @This();
 /// The parser used by the compiler
@@ -34,6 +34,24 @@ const FunctionType = enum {
     TYPE_SCRIPT,
 };
 
+const Scope = enum {
+    LOCAL_SCOPE,
+    GLOBAL_SCOPE,
+    UPVALUE_SCOPE,
+};
+
+const ValueScopeArgPair = struct {
+    scope: Scope = .LOCAL_SCOPE,
+    arg: i64 = 0,
+};
+
+const Upvalue = struct {
+    /// The index of the local variable or upvalue that this upvalue captures
+    index: u8 = 0,
+    /// Boolean indicating whether this upvalue is captured as a local variable or as an upvalue
+    is_local: bool = false,
+};
+
 /// Models a compiler context
 const CompilerContex = struct {
     /// The function that is currently being compiled
@@ -41,17 +59,67 @@ const CompilerContex = struct {
     /// The type of the function that is currently being compiled
     function_type: FunctionType = FunctionType.TYPE_SCRIPT,
     /// The local variables in the current scope
-    locals: [256]Local = undefined,
+    locals: [std.math.maxInt(u8)]Local = undefined,
     /// The number of local variables in the current scope
     local_count: u8 = 1,
     /// The depth of the current scope
     scope_depth: u7 = 0,
+    /// The compiler context enclosing the current one
+    enclosing: ?*CompilerContex = null,
+    /// The upvalues in the current scope (may)
+    upvalues: std.ArrayList(Upvalue),
     /// Creates a new compiler context.
     pub fn init(function_type: FunctionType, memory_mutator: *MemoryMutator, function_name: []const u8) !CompilerContex {
         return CompilerContex{
             .function_type = function_type,
             .object_function = try memory_mutator.createFunctionObject(function_name),
+            .upvalues = std.ArrayList(Upvalue).init(memory_mutator.allocator),
         };
+    }
+
+    /// Resolves a local variable.
+    pub fn resolveLocal(self: *CompilerContex, name: Token) !i64 {
+        var counter = self.local_count;
+        while (counter > 0) : (counter -= 1) {
+            var local: Local = self.locals[counter];
+            if (identifiersEqual(name.start[0..name.length], local.name.start[0..local.name.length])) {
+                return counter;
+            }
+        }
+        return -1;
+    }
+
+    /// Resolves an upvalue.
+    fn resolveUpvalue(self: *CompilerContex, name: Token) !i64 {
+        if (self.enclosing) |enclosing| {
+            var local: i64 = try enclosing.resolveLocal(name);
+            if (local != -1) {
+                return try self.addUpvalue(local, true);
+            }
+            var upvalueIndex: i64 = try enclosing.resolveUpvalue(name);
+            if (upvalueIndex != -1) {
+                return try self.addUpvalue(upvalueIndex, false);
+            }
+        }
+        return -1;
+    }
+
+    /// Adds a local variable to the current scope.
+    /// Returns -2 if the maximum number of local variables has been reached.
+    fn addUpvalue(self: *CompilerContex, index: i64, is_local: bool) !i64 {
+        var i: usize = 0;
+        while (i < self.upvalues.items.len) : (i += 1) {
+            var upvalue = self.upvalues.items[i];
+            if (upvalue.index == i and upvalue.is_local == is_local) {
+                return @intCast(i64, i);
+            }
+        }
+        // The maximum number of upvalues has been reached
+        if (self.upvalues.items.len == std.math.maxInt(u8)) {
+            return -2;
+        }
+        try self.upvalues.append(Upvalue{ .is_local = is_local, .index = @intCast(u8, index) });
+        return @intCast(i64, self.upvalues.items.len - 1);
     }
 };
 
@@ -183,8 +251,9 @@ fn markInitialized(self: *Compiler) !void {
 /// Compiles a function
 fn function(self: *Compiler, function_type: FunctionType) !void {
     var compiler_contex = try CompilerContex.init(function_type, self.memory_mutator, self.parser.previous.asLexeme());
-    compiler_contex.scope_depth = self.compiler_contex.scope_depth;
+    compiler_contex.scope_depth = self.compiler_contex.scope_depth + 1;
     var old_compiler_contex = self.compiler_contex;
+    compiler_contex.enclosing = &old_compiler_contex;
     self.compiler_contex = compiler_contex;
     self.beginScope();
     self.consume(TokenType.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after function name.");
@@ -205,10 +274,12 @@ fn function(self: *Compiler, function_type: FunctionType) !void {
     self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before function body.");
     try self.block();
     var fun = try self.endCompilerContext();
+    var closure = try self.memory_mutator.createClosure(fun);
     self.compiler_contex = old_compiler_contex;
-    try self.emitConstant(Value{ .VAL_OBJECT = &fun.object });
+    try self.emitConstant(Value{ .VAL_OBJECT = &closure.object });
 }
 
+/// Compiles a call expression
 fn call(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     var arg_count: u8 = try self.argumentList();
@@ -452,40 +523,47 @@ fn variable(self: *Compiler, can_assign: bool) !void {
 
 /// Compiles a named variable reference.
 fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
-    var local: bool = true;
-    var arg = try self.resolveLocal(name);
+    var arg = try self.compiler_contex.resolveLocal(name);
+    var scope = Scope.LOCAL_SCOPE;
     if (arg == -1) {
-        arg = try self.identifierConstant(name);
-        local = false;
+        arg = try self.compiler_contex.resolveUpvalue(name);
+        switch (arg) {
+            -1 => {
+                arg = try self.identifierConstant(name);
+                scope = Scope.GLOBAL_SCOPE;
+            },
+            -2 => {
+                self.emitError("Too many upvalues in function.");
+                return;
+            },
+            else => scope = Scope.UPVALUE_SCOPE,
+        }
     }
+    // Set opcode.
     if (can_assign and self.match(.TOKEN_EQUAL)) {
         try self.expression();
-        if (local) {
+        if (scope == .LOCAL_SCOPE) {
             try self.emitOpcode(OpCode.OP_SET_LOCAL);
+            try self.emitByte(@intCast(u8, arg));
+        } else if (scope == .UPVALUE_SCOPE) {
+            try self.emitOpcode(OpCode.OP_SET_UPVALUE);
             try self.emitByte(@intCast(u8, arg));
         } else {
             try self.emitIndexOpcode(@intCast(usize, arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
         }
-    } else {
-        if (local) {
+    }
+    // Get opcode.
+    else {
+        if (scope == .LOCAL_SCOPE) {
             try self.emitOpcode(OpCode.OP_GET_LOCAL);
+            try self.emitByte(@intCast(u8, arg));
+        } else if (scope == .UPVALUE_SCOPE) {
+            try self.emitOpcode(OpCode.OP_GET_UPVALUE);
             try self.emitByte(@intCast(u8, arg));
         } else {
             try self.emitIndexOpcode(@intCast(usize, arg), .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG);
         }
     }
-}
-
-/// Resolves a local variable.
-fn resolveLocal(self: *Compiler, name: Token) !i64 {
-    var counter = self.compiler_contex.local_count;
-    while (counter > 0) : (counter -= 1) {
-        var local: Local = self.compiler_contex.locals[counter];
-        if (identifiersEqual(name.start[0..name.length], local.name.start[0..local.name.length])) {
-            return counter;
-        }
-    }
-    return -1;
 }
 
 /// Compiles a block statement.

@@ -40,23 +40,7 @@ pub const Object = struct {
             // Native functions are equal if they have the same function pointer
             .OBJ_NATIVE_FUNCTION => return self == other,
             // Closures are equal if they have the same function and upvalues
-            .OBJ_CLOSURE => {
-                const self_closure = self.as(ObjectClosure);
-                const other_closure = other.as(ObjectClosure);
-                if (self_closure.function != other_closure.function) {
-                    return false;
-                }
-                if (self_closure.upvalues.len != other_closure.upvalues.len) {
-                    return false;
-                }
-                for (self_closure.upvalues) |self_upvalue, i| {
-                    const other_upvalue = other_closure.upvalues[i];
-                    if (self_upvalue != other_upvalue) {
-                        return false;
-                    }
-                }
-                return true;
-            },
+            .OBJ_CLOSURE => return self == other,
             // Upvalues are equal if the underlying value is equal
             .OBJ_UPVALUE => {
                 const self_upvalue = self.as(ObjectUpvalue);
@@ -165,7 +149,7 @@ pub const ObjectClosure = struct {
     /// The function that was closed over
     function: *ObjectFunction,
     /// The upvalues that were closed over
-    upvalues: []*ObjectUpvalue,
+    upvalues: ?[*]*ObjectUpvalue,
 
     /// Prints the closure to stdout using the given `std.fs.File.Writer`
     pub fn print(self: *ObjectClosure, writer: *const std.fs.File.Writer) !void {
@@ -186,17 +170,15 @@ pub const ObjectUpvalue = struct {
     /// The value of the upvalue
     closed: Value,
     /// The next upvalue in the linked list
-    next: *ObjectUpvalue,
+    next: ?*ObjectUpvalue,
 
     /// Prints the upvalue to stdout using the given `std.fs.File.Writer`
-    pub fn print(self: *ObjectUpvalue, writer: *const std.fs.File.Writer) !void {
-        _ = self;
-        try writer.print("upvalue", .{});
+    pub fn print(self: *ObjectUpvalue, writer: *const std.fs.File.Writer) std.fs.File.WriteFileError!void {
+        try self.closed.print(writer);
     }
 
     /// Print the upvalue to stderr - only for debugging
     pub fn printDebug(self: *ObjectUpvalue) void {
-        _ = self;
-        std.debug.print("upvalue", .{});
+        self.closed.printDebug();
     }
 };

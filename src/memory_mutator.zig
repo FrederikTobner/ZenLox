@@ -63,7 +63,7 @@ pub fn deinit(self: *MemoryMutator) !void {
             .OBJ_FUNCTION => try self.destroyFunctionObject(object.as(ObjectFunction)),
             .OBJ_NATIVE_FUNCTION => try self.destroyNativeFunctionObject(object.as(ObjectNativeFunction)),
             .OBJ_CLOSURE => try self.destroyClosureObject(object.as(ObjectClosure)),
-            .OBJ_UPVALUE => try self.destroyUpvalueObject(object.as(ObjectUpvalue)),
+            .OBJ_UPVALUE => self.destroyUpvalueObject(object.as(ObjectUpvalue)),
         }
     }
     self.objects.deinit();
@@ -88,6 +88,7 @@ pub fn createStringObjectValue(self: *MemoryMutator, chars: []const u8) !Value {
     return result;
 }
 
+/// Allocates a ObjectFunction with the given name
 pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunction {
     // We could intern chunks as well in the future but we should hash them
     // based on the opcodes to avoid long compile times
@@ -98,6 +99,27 @@ pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunc
     object_function.name = try self.allocator.dupe(u8, name);
     try self.objects.append(&(object_function.object));
     return object_function;
+}
+
+/// Allocate a new ObjectClosure with the given function
+pub fn createClosure(self: *MemoryMutator, function: *ObjectFunction) !*ObjectClosure {
+    var object_closure = try self.allocator.create(ObjectClosure);
+    object_closure.function = function;
+    object_closure.upvalues = null;
+    object_closure.object.object_type = ObjectType.OBJ_CLOSURE;
+    try self.objects.append(&(object_closure.object));
+    return object_closure;
+}
+
+/// Allocate a new ObjectUpvalue with the given slot
+pub fn createUpvalue(self: *MemoryMutator, slot: *Value) !*ObjectUpvalue {
+    var object_upvalue = try self.allocator.create(ObjectUpvalue);
+    object_upvalue.location = slot;
+    object_upvalue.next = null;
+    object_upvalue.closed = slot.*;
+    object_upvalue.object.object_type = ObjectType.OBJ_UPVALUE;
+    try self.objects.append(&(object_upvalue.object));
+    return object_upvalue;
 }
 
 /// Allocate a new ObjectString by concatenating the given ObjectStrings
@@ -141,11 +163,22 @@ pub fn destroyNativeFunctionObject(self: *MemoryMutator, function_object: *Objec
 
 /// Free's the memory allocated for the given ObjectString
 pub fn destroyClosureObject(self: *MemoryMutator, closure_object: *ObjectClosure) !void {
-    try self.destroyFunctionObject(closure_object.function);
+    // The function is added to the objects list so we don't need to free it - we should not add it to the list in the future
+    //try self.destroyFunctionObject(closure_object.function);
+    if (closure_object.upvalues) |upvalues| {
+        self.destroyUpvalueChain(upvalues[0]);
+    }
+    self.allocator.destroy(closure_object);
+}
+
+fn destroyUpvalueChain(self: *MemoryMutator, upvalue: *ObjectUpvalue) void {
+    if (upvalue.next) |next| {
+        destroyUpvalueChain(self, next);
+    }
+    self.destroyUpvalueObject(upvalue);
 }
 
 /// Free's the memory allocated for the given upvalue
-pub fn destroyUpvalueObject(self: *MemoryMutator, upvalue_object: *ObjectUpvalue) !void {
-    _ = self;
-    _ = upvalue_object;
+pub fn destroyUpvalueObject(self: *MemoryMutator, upvalue_object: *ObjectUpvalue) void {
+    self.allocator.destroy(upvalue_object);
 }

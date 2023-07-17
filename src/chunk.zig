@@ -7,6 +7,7 @@ pub const OpCode = enum(u8) {
     OP_CALL,
     OP_CONSTANT,
     OP_CONSTANT_LONG,
+    OP_CLOSURE,
     OP_DEFINE_GLOBAL,
     OP_DEFINE_GLOBAL_LONG,
     OP_DIVIDE,
@@ -15,6 +16,7 @@ pub const OpCode = enum(u8) {
     OP_GET_GLOBAL,
     OP_GET_GLOBAL_LONG,
     OP_GET_LOCAL,
+    OP_GET_UPVALUE,
     OP_GREATER,
     OP_GREATER_EQUAL,
     OP_JUMP,
@@ -33,6 +35,7 @@ pub const OpCode = enum(u8) {
     OP_SET_GLOBAL,
     OP_SET_GLOBAL_LONG,
     OP_SET_LOCAL,
+    OP_SET_UPVALUE,
     OP_SUBTRACT,
     OP_TRUE,
 };

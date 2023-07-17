@@ -17,6 +17,12 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
     switch (@intToEnum(OpCode, chunk.byte_code.items[offset.*])) {
         .OP_ADD => simpleInstruction("OP_ADD"),
         .OP_CALL => constantInstruction(chunk, "OP_CALL", offset),
+        .OP_CLOSURE => {
+            offset.* += 1;
+            var constantIndex: u8 = chunk.byte_code.items[offset.*];
+            std.debug.print("OP_CLOSURE {d} ", .{constantIndex});
+            chunk.values.items[constantIndex].printDebug();
+        },
         .OP_CONSTANT => constantInstruction(chunk, "OP_CONSTANT", offset),
         .OP_CONSTANT_LONG => longConstantInstruction(chunk, "OP_CONSTANT_LONG", offset),
         .OP_DEFINE_GLOBAL => constantInstruction(chunk, "OP_DEFINE_GLOBAL", offset),
@@ -27,6 +33,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
         .OP_GET_GLOBAL => constantInstruction(chunk, "OP_GET_GLOBAL", offset),
         .OP_GET_GLOBAL_LONG => longConstantInstruction(chunk, "OP_GET_GLOBAL_LONG", offset),
         .OP_GET_LOCAL => constantInstruction(chunk, "OP_GET_LOCAL", offset),
+        .OP_GET_UPVALUE => constantInstruction(chunk, "OP_GET_UPVALUE", offset),
         .OP_GREATER => simpleInstruction("OP_GREATER"),
         .OP_GREATER_EQUAL => simpleInstruction("OP_GREATER_EQUAL"),
         .OP_JUMP => jumpInstruction(chunk, "OP_JUMP", 1, offset),
@@ -45,6 +52,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: *u32) void {
         .OP_SET_GLOBAL => constantInstruction(chunk, "OP_SET_GLOBAL", offset),
         .OP_SET_GLOBAL_LONG => longConstantInstruction(chunk, "OP_SET_GLOBAL_LONG", offset),
         .OP_SET_LOCAL => constantInstruction(chunk, "OP_SET_LOCAL", offset),
+        .OP_SET_UPVALUE => constantInstruction(chunk, "OP_SET_UPVALUE", offset),
         .OP_SUBTRACT => simpleInstruction("OP_SUBTRACT"),
         .OP_TRUE => simpleInstruction("OP_TRUE"),
     }

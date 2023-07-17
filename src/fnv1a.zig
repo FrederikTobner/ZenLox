@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const ObjectString = @import("object.zig").ObjectString;
-
 /// The offset basis for the FNV-1a algorithm.
 const fnv1a_offset_basis: u64 = 0xcbf29ce484222325;
 /// The prime for the FNV-1a algorithm.
@@ -11,7 +9,7 @@ const fnv1a_prime: u64 = 0x00000100000001B3;
 pub fn hash(chars: []const u8) u64 {
     var hash_value: u64 = fnv1a_offset_basis;
     for (chars) |char| {
-        hash_value = hash_value ^ @as(u64, char);
+        hash_value = hash_value ^ @intCast(u64, char);
         _ = @mulWithOverflow(u64, hash_value, fnv1a_prime, &hash_value);
     }
     return hash_value;

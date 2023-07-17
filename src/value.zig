@@ -3,10 +3,10 @@ const std = @import("std");
 const Object = @import("object.zig").Object;
 
 /// The different types that a value can be
-pub const Type = enum { VAL_NULL, VAL_BOOL, VAL_NUMBER, VAL_OBJECT };
+pub const ValueType = enum { VAL_NULL, VAL_BOOL, VAL_NUMBER, VAL_OBJECT };
 
 /// Tagged union that can hold any of the supported types.
-pub const Value = union(Type) {
+pub const Value = union(ValueType) {
     /// The null value
     VAL_NULL: void,
     /// The boolean value
@@ -17,7 +17,7 @@ pub const Value = union(Type) {
     VAL_OBJECT: *Object,
 
     /// Returns true if the value is of the given type and false otherwise
-    pub fn is(self: Value, comptime value_type: Type) bool {
+    pub fn is(self: Value, comptime value_type: ValueType) bool {
         return switch (self) {
             value_type => true,
             else => false,
@@ -74,3 +74,64 @@ pub const Value = union(Type) {
         }
     }
 };
+
+// Tests
+
+test "Can detetmine value type" {
+    var value = Value{ .VAL_NULL = undefined };
+    try std.testing.expect(value.is(.VAL_NULL));
+    try std.testing.expect(!value.is(.VAL_BOOL));
+    try std.testing.expect(!value.is(.VAL_NUMBER));
+    try std.testing.expect(!value.is(.VAL_OBJECT));
+
+    value = Value{ .VAL_BOOL = true };
+    try std.testing.expect(!value.is(.VAL_NULL));
+    try std.testing.expect(value.is(.VAL_BOOL));
+    try std.testing.expect(!value.is(.VAL_NUMBER));
+    try std.testing.expect(!value.is(.VAL_OBJECT));
+
+    value = Value{ .VAL_NUMBER = 1.0 };
+    try std.testing.expect(!value.is(.VAL_NULL));
+    try std.testing.expect(!value.is(.VAL_BOOL));
+    try std.testing.expect(value.is(.VAL_NUMBER));
+    try std.testing.expect(!value.is(.VAL_OBJECT));
+
+    var obj = Object{ .object_type = .OBJ_FUNCTION };
+    value = Value{ .VAL_OBJECT = &obj };
+    try std.testing.expect(!value.is(.VAL_NULL));
+    try std.testing.expect(!value.is(.VAL_BOOL));
+    try std.testing.expect(!value.is(.VAL_NUMBER));
+    try std.testing.expect(value.is(.VAL_OBJECT));
+}
+
+test "Can determine if value is falsey" {
+    var value = Value{ .VAL_NULL = undefined };
+    try std.testing.expect(value.isFalsey());
+
+    value = Value{ .VAL_BOOL = true };
+    try std.testing.expect(!value.isFalsey());
+    value = Value{ .VAL_BOOL = false };
+    try std.testing.expect(value.isFalsey());
+
+    value = Value{ .VAL_NUMBER = 1.0 };
+    try std.testing.expect(!value.isFalsey());
+
+    var obj = Object{ .object_type = .OBJ_FUNCTION };
+    value = Value{ .VAL_OBJECT = &obj };
+    try std.testing.expect(!value.isFalsey());
+}
+
+test "Can determine equality" {
+    var value = Value{ .VAL_NULL = undefined };
+    try std.testing.expect(value.isEqual(Value{ .VAL_NULL = undefined }));
+
+    value = Value{ .VAL_BOOL = true };
+    try std.testing.expect(value.isEqual(value));
+    try std.testing.expect(!value.isEqual(Value{ .VAL_BOOL = false }));
+
+    value = Value{ .VAL_NUMBER = 1.0 };
+    try std.testing.expect(value.isEqual(Value{ .VAL_NUMBER = 1.0 }));
+    try std.testing.expect(!value.isEqual(Value{ .VAL_NUMBER = 2.0 }));
+
+    // Object equality is tested in the object tests
+}
