@@ -71,6 +71,16 @@ pub const Object = struct {
             .OBJ_UPVALUE => self.as(ObjectUpvalue).location.printDebug(),
         }
     }
+
+    pub fn getPrintableType(self: *Object) []const u8 {
+        switch (self.object_type) {
+            .OBJ_STRING => return "string",
+            .OBJ_FUNCTION => return "function",
+            .OBJ_NATIVE_FUNCTION => return "native function",
+            .OBJ_CLOSURE => return "closure",
+            .OBJ_UPVALUE => return "upvalue",
+        }
+    }
 };
 
 /// String object type
@@ -102,6 +112,8 @@ pub const ObjectFunction = struct {
     chunk: Chunk,
     /// The name of the function - empty for the main function
     name: []const u8,
+    /// The number of upvalues
+    upvalue_count: u8,
 
     /// Prints the function to stdout using the given `std.fs.File.Writer`
     pub fn print(self: *ObjectFunction, writer: *const std.fs.File.Writer) !void {
@@ -149,7 +161,9 @@ pub const ObjectClosure = struct {
     /// The function that was closed over
     function: *ObjectFunction,
     /// The upvalues that were closed over
-    upvalues: ?[*]*ObjectUpvalue,
+    upvalues: [*]?*ObjectUpvalue,
+    /// The number of upvalues
+    upvalue_count: u8,
 
     /// Prints the closure to stdout using the given `std.fs.File.Writer`
     pub fn print(self: *ObjectClosure, writer: *const std.fs.File.Writer) !void {

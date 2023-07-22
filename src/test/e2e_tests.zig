@@ -91,6 +91,10 @@ test "function with global upvalue" {
     try globalVariableBasedTest("var i = 3; fun inc() {i = i + 1;} inc();", Value{ .VAL_NUMBER = 4 });
 }
 
+test "function with closure upvalue" {
+    try globalVariableBasedTest("fun outer() {var x = 3; fun inc() {x = x + 1;} inc(); return x; } var i = outer();", Value{ .VAL_NUMBER = 4 });
+}
+
 // Errors
 
 test "undefined variable" {

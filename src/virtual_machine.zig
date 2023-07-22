@@ -133,12 +133,22 @@ fn run(self: *VirtualMachine) !void {
         switch (self.readOpcode()) {
             .OP_ADD => try self.binaryOperation(.OP_ADD),
             .OP_CALL => {
-                var arg_count = self.currentChunk().byte_code.items[self.currentFrame().instruction_index];
+                var arg_count = self.readByte();
                 _ = try self.callValue((self.value_stack.stack_top - arg_count - 1)[0], arg_count);
             },
             .OP_CLOSURE => {
                 const function = self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectFunction);
                 const closure = try self.memory_mutator.createClosure(function);
+                var i: usize = 0;
+                while (i < function.upvalue_count) : (i += 1) {
+                    const is_local = self.readByte();
+                    const index = self.readByte();
+                    if (is_local != 0) {
+                        closure.upvalues[i] = try self.captureUpvalue(&(self.currentFrame().slots + index - 1)[0]);
+                    } else {
+                        closure.upvalues[i] = self.currentFrame().closure.upvalues[index];
+                    }
+                }
                 try self.value_stack.push(Value{ .VAL_OBJECT = &closure.object });
             },
             .OP_CONSTANT => try self.value_stack.push(self.currentChunk().values.items[self.readByte()]),
@@ -153,7 +163,7 @@ fn run(self: *VirtualMachine) !void {
             .OP_GET_LOCAL => try self.value_stack.push(self.currentFrame().slots[self.readByte()]),
             .OP_GET_UPVALUE => {
                 const slot = self.readByte();
-                try self.value_stack.push(self.currentFrame().closure.upvalues.?[slot].closed);
+                try self.value_stack.push((self.currentFrame().closure.upvalues + slot)[0].?.closed);
             },
             .OP_GREATER => try self.binaryOperation(.OP_GREATER),
             .OP_GREATER_EQUAL => try self.binaryOperation(.OP_GREATER_EQUAL),
@@ -174,7 +184,12 @@ fn run(self: *VirtualMachine) !void {
                 self.currentFrame().instruction_index -= offset;
             },
             .OP_MULTIPLY => try self.binaryOperation(.OP_MULTIPLY),
-            .OP_NEGATE => try self.value_stack.push(Value{ .VAL_NUMBER = -self.value_stack.pop().VAL_NUMBER }),
+            .OP_NEGATE => {
+                if (!self.value_stack.peek(0).is(.VAL_NUMBER)) {
+                    return self.reportRunTimeError("Operand must be a number", .{});
+                }
+                try self.value_stack.push(Value{ .VAL_NUMBER = -self.value_stack.pop().VAL_NUMBER });
+            },
             .OP_NOT => try self.value_stack.push(Value{ .VAL_BOOL = self.value_stack.pop().isFalsey() }),
             .OP_NOT_EQUAL => try self.binaryOperation(.OP_NOT_EQUAL),
             .OP_NULL => try self.value_stack.push(Value{ .VAL_NULL = undefined }),
@@ -184,8 +199,9 @@ fn run(self: *VirtualMachine) !void {
                     _ = self.value_stack.pop();
                     return;
                 }
-                self.frame_count -= 1;
+                self.closeUpvalues();
                 self.value_stack.stack_top = self.currentFrame().slots;
+                self.frame_count -= 1;
                 try self.value_stack.push(result);
             },
             .OP_POP => _ = self.value_stack.pop(),
@@ -195,10 +211,10 @@ fn run(self: *VirtualMachine) !void {
             },
             .OP_SET_GLOBAL => try self.setGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
             .OP_SET_GLOBAL_LONG => try self.setGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
-            .OP_SET_LOCAL => self.value_stack.items[self.readByte()] = self.value_stack.peek(0),
+            .OP_SET_LOCAL => self.currentFrame().slots[self.readByte()] = self.value_stack.peek(0),
             .OP_SET_UPVALUE => {
                 const slot = self.readByte();
-                self.currentFrame().closure.upvalues.?[slot].closed = self.value_stack.peek(0);
+                self.currentFrame().closure.upvalues[slot].?.closed = self.value_stack.peek(0);
             },
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
             .OP_TRUE => try self.value_stack.push(Value{ .VAL_BOOL = true }),
@@ -341,9 +357,21 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
     return error.RuntimeError;
 }
 
-fn captureUpvalue(self: *VirtualMachine, local: *Value) *ObjectUpvalue {
-    var created_upvalue = self.memory_mutator.createUpvalue(local);
+/// Creates an upvalue for the given local.
+fn captureUpvalue(self: *VirtualMachine, local: *Value) !*ObjectUpvalue {
+    var created_upvalue = try self.memory_mutator.createUpvalue(local);
     return created_upvalue;
+}
+
+/// Closes all upvalues in the current frame.
+fn closeUpvalues(self: *VirtualMachine) void {
+    var i: usize = 0;
+    while (i < self.currentFrame().closure.upvalue_count) : (i += 1) {
+        var upvalue = self.currentFrame().closure.upvalues[i];
+        if (upvalue != null) {
+            upvalue.?.location.* = upvalue.?.closed;
+        }
+    }
 }
 
 /// Calls a value, either a function or a native function.
@@ -370,7 +398,6 @@ fn call(self: *VirtualMachine, closure: *ObjectClosure, arg_count: u8) !bool {
     if (self.frame_count == 255) {
         try self.reportRunTimeError("Stack overflow", .{});
     }
-    self.currentFrame().instruction_index += 1;
     self.call_frames[self.frame_count] = CallFrame.init(closure, self.value_stack.stack_top - arg_count - 1, 0);
     self.frame_count += 1;
     return true;

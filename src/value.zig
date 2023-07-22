@@ -66,12 +66,12 @@ pub const Value = union(ValueType) {
 
     /// Returns a string representation of the value's type
     pub fn getPrintableType(self: Value) []const u8 {
-        switch (self) {
-            .VAL_NULL => return "undefiened",
-            .VAL_BOOL => return "boolean",
-            .VAL_NUMBER => return "number",
-            .VAL_OBJECT => return "object",
-        }
+        return switch (self) {
+            .VAL_NULL => "undefiened",
+            .VAL_BOOL => "boolean",
+            .VAL_NUMBER => "number",
+            .VAL_OBJECT => self.VAL_OBJECT.getPrintableType(),
+        };
     }
 };
 

@@ -47,9 +47,9 @@ const ValueScopeArgPair = struct {
 
 const Upvalue = struct {
     /// The index of the local variable or upvalue that this upvalue captures
-    index: u8 = 0,
+    index: u8,
     /// Boolean indicating whether this upvalue is captured as a local variable or as an upvalue
-    is_local: bool = false,
+    is_local: bool,
 };
 
 /// Models a compiler context
@@ -110,7 +110,7 @@ const CompilerContex = struct {
         var i: usize = 0;
         while (i < self.upvalues.items.len) : (i += 1) {
             var upvalue = self.upvalues.items[i];
-            if (upvalue.index == i and upvalue.is_local == is_local) {
+            if (upvalue.index == index and upvalue.is_local == is_local) {
                 return @intCast(i64, i);
             }
         }
@@ -119,7 +119,8 @@ const CompilerContex = struct {
             return -2;
         }
         try self.upvalues.append(Upvalue{ .is_local = is_local, .index = @intCast(u8, index) });
-        return @intCast(i64, self.upvalues.items.len - 1);
+        self.object_function.upvalue_count += 1;
+        return @intCast(i64, self.object_function.upvalue_count - 1);
     }
 };
 
@@ -274,9 +275,14 @@ fn function(self: *Compiler, function_type: FunctionType) !void {
     self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before function body.");
     try self.block();
     var fun = try self.endCompilerContext();
-    var closure = try self.memory_mutator.createClosure(fun);
     self.compiler_contex = old_compiler_contex;
-    try self.emitConstant(Value{ .VAL_OBJECT = &closure.object });
+    try self.emitOpcode(.OP_CLOSURE);
+    try self.emitByte(@intCast(u8, try self.makeConstant(Value{ .VAL_OBJECT = &fun.object })));
+    var i: usize = 0;
+    while (i < self.compiler_contex.object_function.upvalue_count) : (i += 1) {
+        try self.emitByte(if (self.compiler_contex.upvalues.items[i].is_local) 1 else 0);
+        try self.emitByte(self.compiler_contex.upvalues.items[i].index);
+    }
 }
 
 /// Compiles a call expression
@@ -861,6 +867,7 @@ inline fn endCompilerContext(self: *Compiler) !*ObjectFunction {
         self.compiler_contex.object_function.printDebug();
         Disassembler.disassemble(self.getCompilingChunk());
     }
+    self.compiler_contex.upvalues.deinit();
     return self.compiler_contex.object_function;
 }
 

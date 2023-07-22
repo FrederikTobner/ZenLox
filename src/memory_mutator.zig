@@ -97,6 +97,7 @@ pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunc
     object_function.chunk = Chunk.init(self.allocator);
     object_function.object.object_type = ObjectType.OBJ_FUNCTION;
     object_function.name = try self.allocator.dupe(u8, name);
+    object_function.upvalue_count = 0;
     try self.objects.append(&(object_function.object));
     return object_function;
 }
@@ -105,9 +106,15 @@ pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunc
 pub fn createClosure(self: *MemoryMutator, function: *ObjectFunction) !*ObjectClosure {
     var object_closure = try self.allocator.create(ObjectClosure);
     object_closure.function = function;
-    object_closure.upvalues = null;
+    object_closure.upvalues = @ptrCast([*]?*ObjectUpvalue, try self.allocator.alloc(*ObjectUpvalue, function.upvalue_count));
+    object_closure.upvalue_count = function.upvalue_count;
     object_closure.object.object_type = ObjectType.OBJ_CLOSURE;
     try self.objects.append(&(object_closure.object));
+    var i: usize = 0;
+    while (i < function.upvalue_count) {
+        object_closure.upvalues[i] = null;
+        i += 1;
+    }
     return object_closure;
 }
 
@@ -165,9 +172,8 @@ pub fn destroyNativeFunctionObject(self: *MemoryMutator, function_object: *Objec
 pub fn destroyClosureObject(self: *MemoryMutator, closure_object: *ObjectClosure) !void {
     // The function is added to the objects list so we don't need to free it - we should not add it to the list in the future
     //try self.destroyFunctionObject(closure_object.function);
-    if (closure_object.upvalues) |upvalues| {
-        self.destroyUpvalueChain(upvalues[0]);
-    }
+    const upvalues = closure_object.upvalues[0..closure_object.upvalue_count];
+    self.allocator.free(upvalues);
     self.allocator.destroy(closure_object);
 }
 
