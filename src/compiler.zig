@@ -52,6 +52,46 @@ const Upvalue = struct {
     is_local: bool,
 };
 
+/// The parser used by the compiler
+const Parser = struct {
+    current: Token = undefined,
+    previous: Token = undefined,
+    had_error: bool = false,
+    panic_mode: bool = false,
+};
+
+/// Models a local variable in a scope
+const Local = struct {
+    name: Token = undefined,
+    depth: i8 = 0,
+    is_caputured: bool = false,
+};
+
+/// The precedence of a parsing rule
+const Precedence = enum {
+    PREC_NONE,
+    PREC_ASSIGNMENT, // =
+    PREC_OR, // or
+    PREC_AND, // and
+    PREC_EQUALITY, // == !=
+    PREC_COMPARISON, // < > <= >=
+    PREC_TERM, // + -
+    PREC_FACTOR, // * /
+    PREC_UNARY, // ! -
+    PREC_CALL, // . ()
+    PREC_PRIMARY,
+};
+
+/// Models a parsing rule
+const ParseRule = struct {
+    /// The prefix function
+    prefix: ?*const fn (*Compiler, bool) std.mem.Allocator.Error!void = null,
+    /// The infix function
+    infix: ?*const fn (*Compiler, bool) std.mem.Allocator.Error!void = null,
+    /// The precedence of the rule
+    precedence: Precedence = Precedence.PREC_NONE,
+};
+
 /// Models a compiler context
 const CompilerContex = struct {
     /// The function that is currently being compiled
@@ -94,6 +134,7 @@ const CompilerContex = struct {
         if (self.enclosing) |enclosing| {
             var local: i64 = try enclosing.resolveLocal(name);
             if (local != -1) {
+                enclosing.locals[@intCast(usize, local)].is_caputured = true;
                 return try self.addUpvalue(local, true);
             }
             var upvalueIndex: i64 = try enclosing.resolveUpvalue(name);
@@ -122,45 +163,6 @@ const CompilerContex = struct {
         self.object_function.upvalue_count += 1;
         return @intCast(i64, self.object_function.upvalue_count - 1);
     }
-};
-
-/// The parser used by the compiler
-const Parser = struct {
-    current: Token = undefined,
-    previous: Token = undefined,
-    had_error: bool = false,
-    panic_mode: bool = false,
-};
-
-/// Models a local variable in a scope
-const Local = struct {
-    name: Token = undefined,
-    depth: i8 = 0,
-};
-
-/// The precedence of a parsing rule
-const Precedence = enum {
-    PREC_NONE,
-    PREC_ASSIGNMENT, // =
-    PREC_OR, // or
-    PREC_AND, // and
-    PREC_EQUALITY, // == !=
-    PREC_COMPARISON, // < > <= >=
-    PREC_TERM, // + -
-    PREC_FACTOR, // * /
-    PREC_UNARY, // ! -
-    PREC_CALL, // . ()
-    PREC_PRIMARY,
-};
-
-/// Models a parsing rule
-const ParseRule = struct {
-    /// The prefix function
-    prefix: ?*const fn (*Compiler, bool) std.mem.Allocator.Error!void = null,
-    /// The infix function
-    infix: ?*const fn (*Compiler, bool) std.mem.Allocator.Error!void = null,
-    /// The precedence of the rule
-    precedence: Precedence = Precedence.PREC_NONE,
 };
 
 /// Initializes the compiler.
@@ -492,8 +494,7 @@ fn emitLoop(self: *Compiler, loop_start: u16) !void {
     if (calculated_offset > std.math.maxInt(u16)) {
         self.emitError("Loop body too large.");
     }
-    const offset = @intCast(u16, calculated_offset);
-    const offset_bytes = [_]u8{ @intCast(u8, (offset >> 8)), @intCast(u8, offset & 0xff) };
+    const offset_bytes = [_]u8{ @intCast(u8, (calculated_offset >> 8)), @intCast(u8, calculated_offset & 0xff) };
     try self.emitBytes(offset_bytes[0..2]);
 }
 
@@ -609,7 +610,11 @@ fn beginScope(self: *Compiler) void {
 fn endScope(self: *Compiler) !void {
     self.compiler_contex.scope_depth -= 1;
     while (self.compiler_contex.local_count > 0 and self.compiler_contex.locals[self.compiler_contex.local_count - 1].depth > self.compiler_contex.scope_depth) {
-        try self.emitOpcode(OpCode.OP_POP);
+        if (self.compiler_contex.locals[self.compiler_contex.local_count - 1].is_caputured) {
+            try self.emitOpcode(.OP_CLOSE_UPVALUE);
+        } else {
+            try self.emitOpcode(.OP_POP);
+        }
         self.compiler_contex.local_count -= 1;
     }
 }

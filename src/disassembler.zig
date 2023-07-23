@@ -17,6 +17,7 @@ pub fn disassembleInstruction(chunk: *Chunk, instruction_index: *u32) void {
     switch (@intToEnum(OpCode, chunk.byte_code.items[instruction_index.*])) {
         .OP_ADD => simpleInstruction("OP_ADD"),
         .OP_CALL => constantInstruction(chunk, "OP_CALL", instruction_index, 0),
+        .OP_CLOSE_UPVALUE => simpleInstruction("OP_CLOSE_UPVALUE"),
         .OP_CLOSURE => {
             instruction_index.* += 1;
             var constantIndex: u8 = chunk.byte_code.items[instruction_index.*];
@@ -65,7 +66,7 @@ fn simpleInstruction(name: []const u8) void {
 }
 
 /// Disassembles a constant instruction
-fn constantInstruction(chunk: *Chunk, name: []const u8, instruction_index: *u32, comptime offset: i8) void {
+fn constantInstruction(chunk: *Chunk, name: []const u8, instruction_index: *u32, comptime offset: u1) void {
     var constantIndex: u8 = chunk.byte_code.items[instruction_index.* + 1];
     std.debug.print("{s} {d} '", .{ name, constantIndex - offset });
     chunk.values.items[constantIndex - offset].printDebug();

@@ -7,6 +7,7 @@ pub const OpCode = enum(u8) {
     OP_CALL,
     OP_CONSTANT,
     OP_CONSTANT_LONG,
+    OP_CLOSE_UPVALUE,
     OP_CLOSURE,
     OP_DEFINE_GLOBAL,
     OP_DEFINE_GLOBAL_LONG,

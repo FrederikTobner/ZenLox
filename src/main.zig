@@ -89,8 +89,10 @@ pub fn main() u8 {
 fn handleSingleArg(writer: *const std.fs.File.Writer, allocator: std.mem.Allocator, vm: *VirtualMachine, arg: []u8) !void {
     if ((arg.len == 6 and std.mem.eql(u8, arg, "--help")) or (arg.len == 2 and std.mem.eql(u8, arg, "-h"))) {
         try show_help(writer);
-    } else {
+    } else if (std.mem.eql(u8, arg[arg.len - 3 .. arg.len], ".zl")) {
         try runFile(arg, allocator, vm);
+    } else {
+        try show_usage(writer);
     }
 }
 

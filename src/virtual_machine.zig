@@ -92,6 +92,8 @@ writer: *const std.fs.File.Writer,
 memory_mutator: *MemoryMutator,
 /// The compiler used by the virtual machine.
 compiler: Compiler,
+/// The open upvalues for the virtual machine.
+open_upvalues: ?*ObjectUpvalue = null,
 
 /// Initializes the virtual machine.
 pub fn init(writer: *const std.fs.File.Writer, memory_mutator: *MemoryMutator) !VirtualMachine {
@@ -112,6 +114,7 @@ pub fn deinit(self: *VirtualMachine) void {
 pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
     NativeFunctions.start_time = std.time.milliTimestamp();
     self.value_stack.resetStack();
+    self.open_upvalues = null;
     const function = try self.compiler.compile(source);
     if (function) |fun| {
         const closure = try self.memory_mutator.createClosure(fun);
@@ -136,6 +139,7 @@ fn run(self: *VirtualMachine) !void {
                 var arg_count = self.readByte();
                 _ = try self.callValue((self.value_stack.stack_top - arg_count - 1)[0], arg_count);
             },
+            .OP_CLOSE_UPVALUE => self.closeUpvalues(),
             .OP_CLOSURE => {
                 const function = self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectFunction);
                 const closure = try self.memory_mutator.createClosure(function);
@@ -143,11 +147,7 @@ fn run(self: *VirtualMachine) !void {
                 while (i < function.upvalue_count) : (i += 1) {
                     const is_local = self.readByte();
                     const index = self.readByte();
-                    if (is_local != 0) {
-                        closure.upvalues[i] = try self.captureUpvalue(&(self.currentFrame().slots + index - 1)[0]);
-                    } else {
-                        closure.upvalues[i] = self.currentFrame().closure.upvalues[index];
-                    }
+                    closure.upvalues[i] = if (is_local != 0) try self.captureUpvalue(&self.currentFrame().slots[index - 1]) else self.currentFrame().closure.upvalues[index];
                 }
                 try self.value_stack.push(Value{ .VAL_OBJECT = &closure.object });
             },
@@ -212,10 +212,7 @@ fn run(self: *VirtualMachine) !void {
             .OP_SET_GLOBAL => try self.setGlobal(self.currentChunk().values.items[self.readByte()].VAL_OBJECT.as(ObjectString)),
             .OP_SET_GLOBAL_LONG => try self.setGlobal(self.currentChunk().values.items[self.readShortWord()].VAL_OBJECT.as(ObjectString)),
             .OP_SET_LOCAL => self.currentFrame().slots[self.readByte()] = self.value_stack.peek(0),
-            .OP_SET_UPVALUE => {
-                const slot = self.readByte();
-                self.currentFrame().closure.upvalues[slot].?.closed = self.value_stack.peek(0);
-            },
+            .OP_SET_UPVALUE => self.currentFrame().closure.upvalues[self.readByte()].?.closed = self.value_stack.peek(0),
             .OP_SUBTRACT => try self.binaryOperation(.OP_SUBTRACT),
             .OP_TRUE => try self.value_stack.push(Value{ .VAL_BOOL = true }),
         }
@@ -226,6 +223,18 @@ fn run(self: *VirtualMachine) !void {
 fn binaryOperation(self: *VirtualMachine, comptime op: OpCode) !void {
     var b: Value = self.value_stack.pop();
     var a: Value = self.value_stack.pop();
+    switch (op) {
+        .OP_EQUAL => {
+            try self.value_stack.push(Value{ .VAL_BOOL = a.isEqual(b) });
+            return;
+        },
+        .OP_NOT_EQUAL => {
+            try self.value_stack.push(Value{ .VAL_BOOL = !a.isEqual(b) });
+            return;
+        },
+        else => {},
+    }
+
     if (a.is(.VAL_NUMBER) and b.is(.VAL_NUMBER)) {
         switch (op) {
             .OP_ADD => try self.value_stack.push(Value{ .VAL_NUMBER = a.VAL_NUMBER + b.VAL_NUMBER }),
@@ -240,8 +249,6 @@ fn binaryOperation(self: *VirtualMachine, comptime op: OpCode) !void {
         }
     } else {
         switch (op) {
-            .OP_EQUAL => try self.value_stack.push(Value{ .VAL_BOOL = a.isEqual(b) }),
-            .OP_NOT_EQUAL => try self.value_stack.push(Value{ .VAL_BOOL = !a.isEqual(b) }),
             .OP_ADD => {
                 if (a.is(.VAL_OBJECT) and b.is(.VAL_OBJECT) and a.VAL_OBJECT.object_type == ObjectType.OBJ_STRING and b.VAL_OBJECT.object_type == ObjectType.OBJ_STRING) {
                     var a_string = a.VAL_OBJECT.as(ObjectString);
@@ -359,18 +366,44 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
 
 /// Creates an upvalue for the given local.
 fn captureUpvalue(self: *VirtualMachine, local: *Value) !*ObjectUpvalue {
-    var created_upvalue = try self.memory_mutator.createUpvalue(local);
-    return created_upvalue;
+    var previous_upvalue: ?*ObjectUpvalue = null;
+    var created_upvalue = self.open_upvalues;
+    while (created_upvalue != null and @ptrToInt(created_upvalue.?.location) > @ptrToInt(local)) {
+        previous_upvalue = created_upvalue;
+        created_upvalue = created_upvalue.?.next;
+    }
+    if (created_upvalue != null and created_upvalue.?.location == local) {
+        return created_upvalue.?;
+    }
+    created_upvalue = try self.memory_mutator.createUpvalue(local);
+    created_upvalue.?.next = previous_upvalue;
+    if (previous_upvalue == null) {
+        self.open_upvalues = created_upvalue;
+    } else {
+        previous_upvalue.?.next = created_upvalue;
+    }
+    return created_upvalue.?;
 }
 
-/// Closes all upvalues in the current frame.
+/// Closes all upvalues of the current frame on the call stack.
 fn closeUpvalues(self: *VirtualMachine) void {
     var i: usize = 0;
     while (i < self.currentFrame().closure.upvalue_count) : (i += 1) {
         var upvalue = self.currentFrame().closure.upvalues[i];
-        if (upvalue != null) {
-            upvalue.?.location.* = upvalue.?.closed;
+        if (upvalue) |upval| {
+            upval.location.* = upval.closed;
         }
+    }
+}
+
+fn closeUpvalue(self: *VirtualMachine, last: [*]Value) void {
+    while (self.open_upvalues) |upvalues| {
+        if (@ptrToInt(upvalues.location) <= @ptrToInt(last)) {
+            break;
+        }
+        upvalues.closed = upvalues.location.*;
+        upvalues.location.* = upvalues.closed;
+        self.open_upvalues = upvalues.next;
     }
 }
 
