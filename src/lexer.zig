@@ -11,8 +11,8 @@ line: u32 = 1,
 pub fn init(source: []const u8) Lexer {
     return Lexer{
         .source = source,
-        .start = @ptrCast([*]const u8, source),
-        .current = @ptrCast([*]const u8, source),
+        .start = @ptrCast(source),
+        .current = @ptrCast(source),
     };
 }
 /// Scans the next token in the source string.
@@ -105,7 +105,7 @@ fn makeToken(self: *Lexer, token_type: TokenType) Token {
     return Token{
         .token_type = token_type,
         .line = self.line,
-        .length = @ptrToInt(self.current) - @ptrToInt(self.start),
+        .length = @intFromPtr(self.current) - @intFromPtr(self.start),
         .start = self.start,
     };
 }
@@ -122,7 +122,7 @@ fn makeErrorToken(self: *Lexer, message: []const u8) Token {
 
 /// Determines if the lexer has reached the end of the source string.
 inline fn isAtEnd(self: *Lexer) bool {
-    return @ptrToInt(self.current) == @ptrToInt(&self.source.ptr[self.source.len]);
+    return @intFromPtr(self.current) == @intFromPtr(&self.source.ptr[self.source.len]);
 }
 
 /// Determines if the given character is a digit.
@@ -223,7 +223,7 @@ inline fn checkKeyword(self: *Lexer, startIndex: usize, rest: []const u8, tokenT
 
 /// Calculates the distance between the start of the current token and the start of the source string.
 inline fn distance(self: *Lexer) usize {
-    return @ptrToInt(self.current) - @ptrToInt(self.start);
+    return @intFromPtr(self.current) - @intFromPtr(self.start);
 }
 
 // Tests

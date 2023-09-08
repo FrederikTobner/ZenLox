@@ -69,7 +69,7 @@ pub fn deinit(self: *Chunk) void {
 /// Appends an opcode to the chunk
 pub fn writeOpCode(self: *Chunk, byte: OpCode, line: u32) !void {
     try self.lines.append(line);
-    try self.byte_code.append(@enumToInt(byte));
+    try self.byte_code.append(@intFromEnum(byte));
 }
 
 /// Appends a byte to the chunk
@@ -82,7 +82,7 @@ pub fn writeByte(self: *Chunk, byte: u8, line: u32) !void {
 pub fn writeShortWord(self: *Chunk, sword: u24, line: u32) !void {
     const shiftValues = [_]u8{ 16, 8, 0 };
     inline for (shiftValues) |shift| {
-        try self.writeByte(@intCast(u8, sword >> shift), line);
+        try self.writeByte(@as(u8, sword >> shift), line);
     }
 }
 

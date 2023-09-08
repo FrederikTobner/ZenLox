@@ -13,14 +13,14 @@ pub fn main() u8 {
     defer _ = general_purpose_allocator.deinit();
     var memory_mutator = MemoryMutator.init(allocator);
     memory_mutator.defineNativeFunctions() catch {
-        return @enumToInt(SysExits.EX_OSERR);
+        return @intFromEnum(SysExits.EX_OSERR);
     };
     var vm = VirtualMachine.init(&writer, &memory_mutator) catch {
-        return @enumToInt(SysExits.EX_OSERR);
+        return @intFromEnum(SysExits.EX_OSERR);
     };
     defer vm.deinit();
     const args = std.process.argsAlloc(allocator) catch {
-        return @enumToInt(SysExits.EX_OSERR);
+        return @intFromEnum(SysExits.EX_OSERR);
     };
     defer std.process.argsFree(allocator, args);
     if (switch (args.len) {
@@ -29,7 +29,7 @@ pub fn main() u8 {
         2 => handleSingleArg(&writer, allocator, &vm, args[1]),
         else => show_usage(&writer),
     }) {
-        return @enumToInt(SysExits.EX_OK);
+        return @intFromEnum(SysExits.EX_OK);
     } else |err| {
         switch (err) {
             error.CompileError => std.debug.print("Compile error\n", .{}),
@@ -48,10 +48,13 @@ pub fn main() u8 {
             error.FileTooBig => std.debug.print("File too big\n", .{}),
             error.InputOutput => std.debug.print("Input/Output error\n", .{}),
             error.InvalidHandle => std.debug.print("Invalid handle\n", .{}),
+            error.InvalidArgument => std.debug.print("Invalid argument\n", .{}),
             error.InvalidUtf8 => std.debug.print("Invalid UTF-8\n", .{}),
             error.IsDir => std.debug.print("Is a directory\n", .{}),
             error.LockViolation => std.debug.print("Lock violation\n", .{}),
             error.NameTooLong => std.debug.print("Name too long\n", .{}),
+            error.NetNameDeleted => std.debug.print("Network name deleted\n", .{}),
+            error.NetworkNotFound => std.debug.print("Network not found\n", .{}),
             error.NoDevice => std.debug.print("No device\n", .{}),
             error.NoSpaceLeft => std.debug.print("No space left\n", .{}),
             error.NotDir => std.debug.print("Not a directory\n", .{}),
@@ -72,15 +75,15 @@ pub fn main() u8 {
             error.WouldBlock => std.debug.print("Would block\n", .{}),
         }
         return switch (err) {
-            error.CompileError => @enumToInt(SysExits.EX_DATAERR),
-            error.AccessDenied => @enumToInt(SysExits.EX_NOPERM),
-            error.FileNotFound => @enumToInt(SysExits.EX_NOINPUT),
-            error.NotDir => @enumToInt(SysExits.EX_NOINPUT),
-            error.PathAlreadyExists => @enumToInt(SysExits.EX_CANTCREAT),
-            error.RuntimeError, error.Unexpected => @enumToInt(SysExits.EX_SOFTWARE),
-            error.InvalidUtf8, error.NameTooLong => @enumToInt(SysExits.EX_DATAERR),
-            error.OutOfMemory, error.OperationAborted, error.SystemResources => @enumToInt(SysExits.EX_OSERR),
-            error.BadPathName, error.BrokenPipe, error.ConnectionResetByPeer, error.ConnectionTimedOut, error.DeviceBusy, error.DiskQuota, error.EndOfStream, error.FileBusy, error.FileLocksNotSupported, error.FileTooBig, error.InputOutput, error.InvalidHandle, error.IsDir, error.LockViolation, error.NoDevice, error.NoSpaceLeft, error.NotOpenForWriting, error.NotOpenForReading, error.PipeBusy, error.ProcessFdQuotaExceeded, error.SharingViolation, error.StreamTooLong, error.SymLinkLoop, error.SystemFdQuotaExceeded, error.Unseekable, error.WouldBlock => @enumToInt(SysExits.EX_IOERR),
+            error.CompileError => @intFromEnum(SysExits.EX_DATAERR),
+            error.AccessDenied => @intFromEnum(SysExits.EX_NOPERM),
+            error.FileNotFound => @intFromEnum(SysExits.EX_NOINPUT),
+            error.NotDir => @intFromEnum(SysExits.EX_NOINPUT),
+            error.PathAlreadyExists => @intFromEnum(SysExits.EX_CANTCREAT),
+            error.RuntimeError, error.InvalidArgument, error.Unexpected => @intFromEnum(SysExits.EX_SOFTWARE),
+            error.InvalidUtf8, error.NameTooLong => @intFromEnum(SysExits.EX_DATAERR),
+            error.OutOfMemory, error.OperationAborted, error.SystemResources => @intFromEnum(SysExits.EX_OSERR),
+            error.BadPathName, error.BrokenPipe, error.ConnectionResetByPeer, error.ConnectionTimedOut, error.DeviceBusy, error.DiskQuota, error.EndOfStream, error.FileBusy, error.FileLocksNotSupported, error.FileTooBig, error.InputOutput, error.InvalidHandle, error.IsDir, error.LockViolation, error.NetNameDeleted, error.NetworkNotFound, error.NoDevice, error.NoSpaceLeft, error.NotOpenForWriting, error.NotOpenForReading, error.PipeBusy, error.ProcessFdQuotaExceeded, error.SharingViolation, error.StreamTooLong, error.SymLinkLoop, error.SystemFdQuotaExceeded, error.Unseekable, error.WouldBlock => @intFromEnum(SysExits.EX_IOERR),
         };
     }
 }
@@ -104,7 +107,7 @@ fn repl(allocator: std.mem.Allocator, vm: *VirtualMachine) !void {
     errdefer allocator.free(input);
     while (true) {
         // No input
-        if (input.len == 1) {
+        if (input.len == 0) {
             allocator.free(input);
             break;
         }

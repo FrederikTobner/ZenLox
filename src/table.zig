@@ -46,7 +46,9 @@ pub fn deinit(self: *Table) void {
 
 /// Sets the given key to the given value.
 pub fn set(self: *Table, key: *ObjectString, value: Value) !bool {
-    if (@intToFloat(f64, self.count) >= (@intToFloat(f64, self.capacity) * table_max_load_factor)) {
+    const previousF: f64 = @floatFromInt(self.count);
+    const currentF: f64 = @floatFromInt(self.capacity);
+    if (previousF >= (currentF * table_max_load_factor)) {
         try self.adjustCapacity(self.growCapacy());
     }
     const entry: *Entry = findEntry(self.entries, self.capacity, key);
@@ -172,7 +174,8 @@ fn adjustCapacity(self: *Table, new_capacity: usize) !void {
 
 /// Calculates the new capacity of the table.
 fn growCapacy(self: *Table) usize {
-    return if (@intToFloat(f64, self.capacity) * table_growth_factor > table_init_capacity) self.capacity * 2 else table_init_capacity;
+    const capacityF: f64 = @floatFromInt(self.capacity);
+    return if (capacityF * table_growth_factor > table_init_capacity) self.capacity * 2 else table_init_capacity;
 }
 
 test "Can get entries" {
@@ -211,7 +214,8 @@ test "Can find entry after adjusting capacity" {
     var key = ObjectString{ .chars = "key", .hash = 123, .object = undefined };
     var value = Value{ .VAL_NUMBER = 1234.0 };
     _ = try table.set(&key, value);
-    try table.adjustCapacity(@floatToInt(usize, @intToFloat(f64, table.capacity) * table_growth_factor));
+    const capacity: f64 = @floatFromInt(table.capacity);
+    try table.adjustCapacity(@intFromFloat(capacity * table_growth_factor));
     var returned_value = table.get(&key);
     try std.testing.expectEqual(value, returned_value.?);
 }

@@ -106,7 +106,7 @@ pub fn createFunctionObject(self: *MemoryMutator, name: []const u8) !*ObjectFunc
 pub fn createClosure(self: *MemoryMutator, function: *ObjectFunction) !*ObjectClosure {
     var object_closure = try self.allocator.create(ObjectClosure);
     object_closure.function = function;
-    object_closure.upvalues = @ptrCast([*]?*ObjectUpvalue, try self.allocator.alloc(*ObjectUpvalue, function.upvalue_count));
+    object_closure.upvalues = @ptrCast(try self.allocator.alloc(*ObjectUpvalue, function.upvalue_count));
     object_closure.upvalue_count = function.upvalue_count;
     object_closure.object.object_type = ObjectType.OBJ_CLOSURE;
     try self.objects.append(&(object_closure.object));

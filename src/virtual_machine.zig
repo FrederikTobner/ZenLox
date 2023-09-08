@@ -44,7 +44,7 @@ const CallFrame = struct {
 /// The maximum number of call frames that can be active at once.
 const CALL_FRAME_MAX: u7 = 64;
 /// The maximum number of values that can be on the stack at once.
-const STACK_MAX: u15 = 256 * @intCast(u15, CALL_FRAME_MAX);
+const STACK_MAX: u15 = 256 * @as(u15, CALL_FRAME_MAX);
 
 /// The value stack of the virtual machine.
 const ValueStack = struct {
@@ -57,7 +57,7 @@ const ValueStack = struct {
     }
     /// Pushes a value onto the stack.
     fn push(self: *ValueStack, value: Value) !void {
-        if (@ptrToInt(self.stack_top) > @ptrToInt(&self.items[STACK_MAX - 1])) {
+        if (@intFromPtr(self.stack_top) > @intFromPtr(&self.items[STACK_MAX - 1])) {
             return InterpreterError.RuntimeError;
         }
         self.stack_top[0] = value;
@@ -275,7 +275,7 @@ inline fn readByte(self: *VirtualMachine) u8 {
 
 /// Reads an opcode from the current chunk.
 inline fn readOpcode(self: *VirtualMachine) OpCode {
-    return @intToEnum(OpCode, self.readByte());
+    return @enumFromInt(self.readByte());
 }
 
 /// Traces the execution of the virtual machine.
@@ -284,7 +284,7 @@ fn traceExecution(self: *VirtualMachine) !void {
     Disassembler.disassembleInstruction(self.currentChunk(), &index_copy);
     try self.writer.print("stack: ", .{});
     var stack_pointer: [*]Value = self.value_stack.items[0..];
-    while (@ptrToInt(stack_pointer) < @ptrToInt(self.value_stack.stack_top)) : (stack_pointer += 1) {
+    while (@intFromPtr(stack_pointer) < @intFromPtr(self.value_stack.stack_top)) : (stack_pointer += 1) {
         try self.writer.print("[", .{});
         try stack_pointer[0].print(self.writer);
         try self.writer.print("]", .{});
@@ -294,8 +294,8 @@ fn traceExecution(self: *VirtualMachine) !void {
 
 /// Reads a short from the chunk's byte code.
 inline fn readShort(self: *VirtualMachine) u16 {
-    var short = @intCast(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]) << 8;
-    short |= @intCast(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]);
+    var short = @as(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]) << 8;
+    short |= @as(u16, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]);
     self.currentFrame().instruction_index += 2;
     return short;
 }
@@ -303,9 +303,9 @@ inline fn readShort(self: *VirtualMachine) u16 {
 /// Reads a short from the chunk's byte code.
 /// A short word is 3 bytes long.
 inline fn readShortWord(self: *VirtualMachine) u24 {
-    var short_word = @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]) << 16;
-    short_word |= @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]) << 8;
-    short_word |= @intCast(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 2]);
+    var short_word = @as(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index]) << 16;
+    short_word |= @as(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 1]) << 8;
+    short_word |= @as(u24, self.currentChunk().byte_code.items[self.currentFrame().instruction_index + 2]);
     self.currentFrame().instruction_index += 3;
     return short_word;
 }
@@ -368,7 +368,7 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
 fn captureUpvalue(self: *VirtualMachine, local: *Value) !*ObjectUpvalue {
     var previous_upvalue: ?*ObjectUpvalue = null;
     var created_upvalue = self.open_upvalues;
-    while (created_upvalue != null and @ptrToInt(created_upvalue.?.location) > @ptrToInt(local)) {
+    while (created_upvalue != null and @intFromPtr(created_upvalue.?.location) > @intFromPtr(local)) {
         previous_upvalue = created_upvalue;
         created_upvalue = created_upvalue.?.next;
     }
@@ -398,7 +398,7 @@ fn closeUpvalues(self: *VirtualMachine) void {
 
 fn closeUpvalue(self: *VirtualMachine, last: [*]Value) void {
     while (self.open_upvalues) |upvalues| {
-        if (@ptrToInt(upvalues.location) <= @ptrToInt(last)) {
+        if (@intFromPtr(upvalues.location) <= @intFromPtr(last)) {
             break;
         }
         upvalues.closed = upvalues.location.*;
@@ -458,11 +458,11 @@ test "Can fill stack" {
     vm.value_stack.resetStack();
     var counter: usize = 0;
     var stack_top: [*]Value = vm.value_stack.items[0..];
-    try std.testing.expectEqual(@ptrToInt(stack_top), @ptrToInt(vm.value_stack.stack_top));
+    try std.testing.expectEqual(@intFromPtr(stack_top), @intFromPtr(vm.value_stack.stack_top));
     while (counter < STACK_MAX) : (counter += 1) {
         try vm.value_stack.push(Value{ .VAL_BOOL = true });
     }
-    try std.testing.expectEqual(@ptrToInt(stack_top + STACK_MAX), @ptrToInt(vm.value_stack.stack_top));
+    try std.testing.expectEqual(@intFromPtr(stack_top + STACK_MAX), @intFromPtr(vm.value_stack.stack_top));
 }
 
 test "Can detect Stack Overflow" {

@@ -9,8 +9,8 @@ const fnv1a_prime: u64 = 0x00000100000001B3;
 pub fn hash(chars: []const u8) u64 {
     var hash_value: u64 = fnv1a_offset_basis;
     for (chars) |char| {
-        hash_value = hash_value ^ @intCast(u64, char);
-        _ = @mulWithOverflow(u64, hash_value, fnv1a_prime, &hash_value);
+        hash_value = hash_value ^ @as(u64, char);
+        hash_value = @mulWithOverflow(hash_value, fnv1a_prime)[0];
     }
     return hash_value;
 }

@@ -134,7 +134,8 @@ const CompilerContex = struct {
         if (self.enclosing) |enclosing| {
             var local: i64 = try enclosing.resolveLocal(name);
             if (local != -1) {
-                enclosing.locals[@intCast(usize, local)].is_caputured = true;
+                const index: usize = @intCast(local);
+                enclosing.locals[index].is_caputured = true;
                 return try self.addUpvalue(local, true);
             }
             var upvalueIndex: i64 = try enclosing.resolveUpvalue(name);
@@ -152,16 +153,17 @@ const CompilerContex = struct {
         while (i < self.upvalues.items.len) : (i += 1) {
             var upvalue = self.upvalues.items[i];
             if (upvalue.index == index and upvalue.is_local == is_local) {
-                return @intCast(i64, i);
+                const iCasted: i64 = @intCast(i);
+                return iCasted;
             }
         }
         // The maximum number of upvalues has been reached
         if (self.upvalues.items.len == std.math.maxInt(u8)) {
             return -2;
         }
-        try self.upvalues.append(Upvalue{ .is_local = is_local, .index = @intCast(u8, index) });
+        try self.upvalues.append(Upvalue{ .is_local = is_local, .index = @intCast(index) });
         self.object_function.upvalue_count += 1;
-        return @intCast(i64, self.object_function.upvalue_count - 1);
+        return @as(i64, self.object_function.upvalue_count - 1);
     }
 };
 
@@ -279,7 +281,7 @@ fn function(self: *Compiler, function_type: FunctionType) !void {
     var fun = try self.endCompilerContext();
     self.compiler_contex = old_compiler_contex;
     try self.emitOpcode(.OP_CLOSURE);
-    try self.emitByte(@intCast(u8, try self.makeConstant(Value{ .VAL_OBJECT = &fun.object })));
+    try self.emitByte(@intCast(try self.makeConstant(Value{ .VAL_OBJECT = &fun.object })));
     var i: usize = 0;
     while (i < self.compiler_contex.object_function.upvalue_count) : (i += 1) {
         try self.emitByte(if (self.compiler_contex.upvalues.items[i].is_local) 1 else 0);
@@ -374,7 +376,7 @@ fn addLocal(self: *Compiler, name: Token) !void {
 
 /// Creates a constant from a token and returns the index of the constant in the current chunk.
 fn identifierConstant(self: *Compiler, name: Token) !u24 {
-    return @intCast(u24, try self.makeConstant(try self.memory_mutator.createStringObjectValue(name.start[0..name.length])));
+    return @intCast(try self.makeConstant(try self.memory_mutator.createStringObjectValue(name.start[0..name.length])));
 }
 
 /// Compiles a statement.
@@ -447,7 +449,7 @@ fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
     } else {
         try self.expressionStatement();
     }
-    var loop_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
+    var loop_start: u16 = @intCast(self.getCompilingChunk().byte_code.items.len);
     var exit_jump: i17 = -1;
     if (!self.match(.TOKEN_SEMICOLON)) {
         try self.expression();
@@ -457,7 +459,7 @@ fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
     }
     if (!self.match(.TOKEN_RIGHT_PARENTHESIZE)) {
         const body_jump: u16 = try self.emitJump(OpCode.OP_JUMP);
-        const increment_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
+        const increment_start: u16 = @intCast(self.getCompilingChunk().byte_code.items.len);
         try self.expression();
         try self.emitOpcode(.OP_POP);
         self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after for clauses.");
@@ -468,7 +470,7 @@ fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
     try self.statement();
     try self.emitLoop(loop_start);
     if (exit_jump != -1) {
-        try self.patchJump(@intCast(u16, exit_jump));
+        try self.patchJump(@intCast(exit_jump));
         try self.emitOpcode(.OP_POP);
     }
     try self.endScope();
@@ -476,7 +478,7 @@ fn forStatement(self: *Compiler) std.mem.Allocator.Error!void {
 
 /// Coompiles a while statement.
 fn whileStatement(self: *Compiler) std.mem.Allocator.Error!void {
-    const loop_start: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len);
+    const loop_start: u16 = @intCast(self.getCompilingChunk().byte_code.items.len);
     self.consume(.TOKEN_LEFT_PARENTHESIZE, "Expect '(' after 'while'.");
     try self.expression();
     self.consume(.TOKEN_RIGHT_PARENTHESIZE, "Expect ')' after condition.");
@@ -490,11 +492,13 @@ fn whileStatement(self: *Compiler) std.mem.Allocator.Error!void {
 /// Emits a loop instruction and returns the offset of the jump's operand.
 fn emitLoop(self: *Compiler, loop_start: u16) !void {
     try self.emitOpcode(.OP_LOOP);
-    const calculated_offset: usize = self.getCompilingChunk().byte_code.items.len - @intCast(usize, loop_start) + 2;
+    const calculated_offset: usize = self.getCompilingChunk().byte_code.items.len - @as(usize, loop_start) + 2;
     if (calculated_offset > std.math.maxInt(u16)) {
         self.emitError("Loop body too large.");
     }
-    const offset_bytes = [_]u8{ @intCast(u8, (calculated_offset >> 8)), @intCast(u8, calculated_offset & 0xff) };
+    const jumpA: u8 = @intCast(calculated_offset >> 8);
+    const jumpB: u8 = @intCast(calculated_offset & 0xff);
+    const offset_bytes = [_]u8{ jumpA, jumpB };
     try self.emitBytes(offset_bytes[0..2]);
 }
 
@@ -503,16 +507,18 @@ fn emitJump(self: *Compiler, opcode: OpCode) !u16 {
     try self.emitOpcode(opcode);
     try self.emitByte(0xff);
     try self.emitByte(0xff);
-    return @intCast(u16, self.getCompilingChunk().byte_code.items.len - 2);
+    return @intCast(self.getCompilingChunk().byte_code.items.len - 2);
 }
 
 /// Patches a jump instruction at the given offset.
 fn patchJump(self: *Compiler, offset: u16) !void {
-    const jump: u16 = @intCast(u16, self.getCompilingChunk().byte_code.items.len - offset - 2);
+    const jump: u16 = @intCast(self.getCompilingChunk().byte_code.items.len - offset - 2);
     if (jump > std.math.maxInt(u16)) {
         self.emitError("Too much code to jump over.");
     }
-    const jump_bytes = [_]u8{ @intCast(u8, (jump >> 8)), @intCast(u8, jump & 0xff) };
+    const jumpA: u8 = @intCast(jump >> 8);
+    const jumpB: u8 = @intCast(jump & 0xff);
+    const jump_bytes = [_]u8{ jumpA, jumpB };
     try self.getCompilingChunk().byte_code.replaceRange(offset, 2, jump_bytes[0..]);
 }
 
@@ -551,24 +557,24 @@ fn namedVariable(self: *Compiler, name: Token, can_assign: bool) !void {
         try self.expression();
         if (scope == .LOCAL_SCOPE) {
             try self.emitOpcode(OpCode.OP_SET_LOCAL);
-            try self.emitByte(@intCast(u8, arg));
+            try self.emitByte(@intCast(arg));
         } else if (scope == .UPVALUE_SCOPE) {
             try self.emitOpcode(OpCode.OP_SET_UPVALUE);
-            try self.emitByte(@intCast(u8, arg));
+            try self.emitByte(@intCast(arg));
         } else {
-            try self.emitIndexOpcode(@intCast(usize, arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
+            try self.emitIndexOpcode(@intCast(arg), .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG);
         }
     }
     // Get opcode.
     else {
         if (scope == .LOCAL_SCOPE) {
             try self.emitOpcode(OpCode.OP_GET_LOCAL);
-            try self.emitByte(@intCast(u8, arg));
+            try self.emitByte(@intCast(arg));
         } else if (scope == .UPVALUE_SCOPE) {
             try self.emitOpcode(OpCode.OP_GET_UPVALUE);
-            try self.emitByte(@intCast(u8, arg));
+            try self.emitByte(@intCast(arg));
         } else {
-            try self.emitIndexOpcode(@intCast(usize, arg), .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG);
+            try self.emitIndexOpcode(@intCast(arg), .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG);
         }
     }
 }
@@ -699,7 +705,7 @@ fn emitConstant(self: *Compiler, value: Value) !void {
 
 /// Creates a constant in the current chunk and returns its index.
 inline fn makeConstant(self: *Compiler, value: Value) !usize {
-    return @intCast(u24, try self.getCompilingChunk().addConstant(value));
+    return @as(usize, try self.getCompilingChunk().addConstant(value));
 }
 
 /// Compiles a grouping expression.
@@ -726,7 +732,7 @@ fn binary(self: *Compiler, can_assign: bool) !void {
     _ = can_assign;
     const token_type = self.parser.previous.token_type;
     const rule = self.getRule(token_type);
-    try self.parsePrecedence(@intToEnum(Precedence, @enumToInt(rule.precedence) + 1));
+    try self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
     switch (token_type) {
         .TOKEN_PLUS => try self.emitOpcode(.OP_ADD),
         .TOKEN_MINUS => try self.emitOpcode(.OP_SUBTRACT),
@@ -757,9 +763,9 @@ fn parsePrecedence(self: *Compiler, precedence: Precedence) !void {
         self.emitError("Expect expression.");
         return;
     }
-    const can_assign = @enumToInt(precedence) <= @enumToInt(Precedence.PREC_ASSIGNMENT);
+    const can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.PREC_ASSIGNMENT);
     try prefixRule(self, can_assign);
-    while (@enumToInt(precedence) <= @enumToInt(self.getRule(self.parser.current.token_type).precedence)) {
+    while (@intFromEnum(precedence) <= @intFromEnum(self.getRule(self.parser.current.token_type).precedence)) {
         self.advance();
         const infixRule = self.getRule(self.parser.previous.token_type).infix orelse {
             self.emitError("Expect expression.");
@@ -832,31 +838,34 @@ fn emitBytes(self: *Compiler, bytes: []const u8) !void {
 
 /// Emits an index opcode. If the index is greater than the max u8, it will emit the long opcode.
 fn emitIndexOpcode(self: *Compiler, index: usize, short_opcode: OpCode, long_opcode: OpCode) !void {
-    if (index > @intCast(usize, std.math.maxInt(u24))) {
+    if (index > @as(usize, std.math.maxInt(u24))) {
         self.emitError("Too many constants in one chunk.");
         return;
     }
     // If the index is greater than the max u8, we need to use the long constant opcode.
-    else if (index > @intCast(usize, std.math.maxInt(u8))) {
+    else if (index > @as(usize, std.math.maxInt(u8))) {
         try self.emitOpcode(long_opcode);
-        try self.emitBytes(&[_]u8{ @intCast(u8, (index >> 16) & 0xFF), @intCast(u8, (index >> 8) & 0xFF), @intCast(u8, index) });
+        const jumpA: u8 = @intCast((index >> 16) & 0xFF);
+        const jumpB: u8 = @intCast((index >> 8) & 0xFF);
+        const jumpC: u8 = @intCast(index & 0xFF);
+        try self.emitBytes(&[_]u8{ jumpA, jumpB, jumpC });
     }
     // Otherwise, we can use the normal constant opcode.
     else {
         try self.emitOpcode(short_opcode);
-        try self.emitByte(@intCast(u8, index));
+        try self.emitByte(@intCast(index));
     }
 }
 
 /// Emits the given opcode.
-inline fn emitOpcode(self: *Compiler, comptime op_code: OpCode) !void {
-    try self.emitByte(@enumToInt(op_code));
+inline fn emitOpcode(self: *Compiler, op_code: OpCode) !void {
+    try self.emitByte(@intFromEnum(op_code));
 }
 
 /// Emits the given opcodes.
 fn emitOpcodes(self: *Compiler, comptime op_codes: []const OpCode) !void {
     for (op_codes) |op_code| {
-        try self.emitByte(@enumToInt(op_code));
+        try self.emitByte(@intFromEnum(op_code));
     }
 }
 

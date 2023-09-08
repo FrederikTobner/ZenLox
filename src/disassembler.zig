@@ -14,7 +14,8 @@ pub fn disassemble(chunk: *Chunk) void {
 
 // Disassembles a single instruction in the chunk
 pub fn disassembleInstruction(chunk: *Chunk, instruction_index: *u32) void {
-    switch (@intToEnum(OpCode, chunk.byte_code.items[instruction_index.*])) {
+    const instruction: OpCode = @enumFromInt(chunk.byte_code.items[instruction_index.*]);
+    switch (instruction) {
         .OP_ADD => simpleInstruction("OP_ADD"),
         .OP_CALL => constantInstruction(chunk, "OP_CALL", instruction_index, 0),
         .OP_CLOSE_UPVALUE => simpleInstruction("OP_CLOSE_UPVALUE"),
@@ -76,9 +77,9 @@ fn constantInstruction(chunk: *Chunk, name: []const u8, instruction_index: *u32,
 
 /// Disassembles a long constant instruction
 fn longConstantInstruction(chunk: *Chunk, name: []const u8, instruction_index: *u32, comptime offset: i8) void {
-    var constantIndex: u24 = @intCast(u24, chunk.byte_code.items[instruction_index.* + 1]) << 16;
-    constantIndex |= @intCast(u24, chunk.byte_code.items[instruction_index.* + 2]) << 8;
-    constantIndex |= @intCast(u24, chunk.byte_code.items[instruction_index.* + 3]);
+    var constantIndex: u24 = @as(u24, chunk.byte_code.items[instruction_index.* + 1]) << 16;
+    constantIndex |= @as(u24, chunk.byte_code.items[instruction_index.* + 2]) << 8;
+    constantIndex |= @as(u24, chunk.byte_code.items[instruction_index.* + 3]);
     std.debug.print("{s} {d} '", .{ name, constantIndex - offset });
     chunk.values.items[constantIndex - offset].printDebug();
     std.debug.print("'\n", .{});
@@ -87,8 +88,8 @@ fn longConstantInstruction(chunk: *Chunk, name: []const u8, instruction_index: *
 
 /// Disassembles a jump instruction
 fn jumpInstruction(chunk: *Chunk, name: []const u8, sign: i8, instruction_index: *u32) void {
-    var jump: u16 = @intCast(u16, chunk.byte_code.items[instruction_index.* + 1]) << 8;
-    jump |= @intCast(u16, chunk.byte_code.items[instruction_index.* + 2]);
-    std.debug.print("{s} {X} -> {X}\n", .{ name, instruction_index.* + 3, instruction_index.* + 3 + @intCast(i33, sign) * jump });
+    var jump: u16 = @as(u16, chunk.byte_code.items[instruction_index.* + 1]) << 8;
+    jump |= @as(u16, chunk.byte_code.items[instruction_index.* + 2]);
+    std.debug.print("{s} {X} -> {X}\n", .{ name, instruction_index.* + 3, instruction_index.* + 3 + @as(i33, sign) * jump });
     instruction_index.* += 2;
 }
