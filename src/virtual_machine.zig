@@ -349,7 +349,7 @@ inline fn currentFrame(self: *VirtualMachine) *CallFrame {
 fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: anytype) !void {
     std.debug.print("Runtime error:\n", .{});
     std.debug.print(format, args);
-    std.debug.print("\ncaused at line {d}\n", .{self.currentChunk().lines.items[self.currentFrame().instruction_index]});
+    std.debug.print("caused at line {d}\n", .{self.currentChunk().lines.items[self.currentFrame().instruction_index]});
     var counter = self.frame_count - 1;
     while (counter > 0) {
         var frame = &self.call_frames[counter];
@@ -361,6 +361,7 @@ fn reportRunTimeError(self: *VirtualMachine, comptime format: []const u8, args: 
         }
         counter -= 1;
     }
+    std.debug.print("\n", .{});
     return error.RuntimeError;
 }
 

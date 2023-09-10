@@ -14,9 +14,11 @@ pub fn build(b: *std.build) void {
 
     // Debug options making it easier to debug the VM
     const debug_options = b.addOptions();
+
     // Option to enable tracing of the VM
     const trace_execution = b.option(bool, "traceExecution", "Trace execution of the VM");
     debug_options.addOption(bool, "traceExecution", trace_execution orelse false);
+
     // Option to print the bytecode of the compiled code
     const print_bytecode = b.option(bool, "printBytecode", "Printing the bytcode of the compiled code");
     debug_options.addOption(bool, "printBytecode", print_bytecode orelse false);
@@ -27,11 +29,15 @@ pub fn build(b: *std.build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    // Adds the debug options to the executable of the interpreter
     exe.addOptions("debug_options", debug_options);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
@@ -61,8 +67,12 @@ pub fn build(b: *std.build) void {
         .target = target,
         .optimize = optimize,
     });
+    // Adding the debug options to the test executable
     exe_tests.addOptions("debug_options", debug_options);
+
+    const run_tests = b.addRunArtifact(exe_tests);
+
     // Adding a custom step to run the tests
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&exe_tests.step);
+    test_step.dependOn(&run_tests.step);
 }

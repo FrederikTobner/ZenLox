@@ -1,3 +1,4 @@
+// Files that contain testcases
 comptime {
     _ = @import("src/fnv1a.zig");
     _ = @import("src/lexer.zig");
