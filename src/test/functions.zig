@@ -43,14 +43,13 @@ test "function returning function" {
         .value = Value{ .VAL_NUMBER = 4 },
     }, ExpectedVariable{
         .name = "j",
-        .value = Value{ .VAL_NUMBER = 5},
+        .value = Value{ .VAL_NUMBER = 5 },
     }, ExpectedVariable{
         .name = "k",
         .value = Value{ .VAL_NUMBER = 6 },
     } };
     try TestBase.globalVariableBasedTest("fun outer() {var x = 3; fun inc() { return x = x + 1;} return inc; } var foo = outer(); var i = foo(); var j = foo(); var k = foo();", expected);
 }
-
 
 test "function with twice captured closure upvalue" {
     const expectedVariable = ExpectedVariable{

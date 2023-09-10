@@ -66,7 +66,7 @@ test "Greater Equal" {
 }
 
 test "Less" {
-     const expected = &[_]ExpectedVariable{ ExpectedVariable{
+    const expected = &[_]ExpectedVariable{ ExpectedVariable{
         .name = "i",
         .value = Value{ .VAL_BOOL = false },
     }, ExpectedVariable{
@@ -80,7 +80,7 @@ test "Less" {
 }
 
 test "Less Equal" {
-     const expected = &[_]ExpectedVariable{ ExpectedVariable{
+    const expected = &[_]ExpectedVariable{ ExpectedVariable{
         .name = "i",
         .value = Value{ .VAL_BOOL = false },
     }, ExpectedVariable{
@@ -100,7 +100,7 @@ test "Equal" {
     }, ExpectedVariable{
         .name = "j",
         .value = Value{ .VAL_BOOL = true },
-    }};
+    } };
     try TestBase.globalVariableBasedTest("var i = 3 == 2; var j = 3 == 3;", expected);
 }
 
@@ -111,7 +111,7 @@ test "Not equal" {
     }, ExpectedVariable{
         .name = "j",
         .value = Value{ .VAL_BOOL = false },
-    }};
+    } };
     try TestBase.globalVariableBasedTest("var i = 3 != 2; var j = 3 != 3;", expected);
 }
 
@@ -121,11 +121,9 @@ test "Addition on Boolean" {
     try TestBase.errorProducingTest("var i = 3 + true;", InterpreterError.RuntimeError);
 }
 
-
 test "Subtraction on Boolean" {
     try TestBase.errorProducingTest("var i = 3 - true;", InterpreterError.RuntimeError);
 }
-
 
 test "Multiplication on Boolean" {
     try TestBase.errorProducingTest("var i = 3 * true;", InterpreterError.RuntimeError);
@@ -150,4 +148,3 @@ test "Less on Boolean" {
 test "Less equal on Boolean" {
     try TestBase.errorProducingTest("var i = 3 <= true;", InterpreterError.RuntimeError);
 }
-

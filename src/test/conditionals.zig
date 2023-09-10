@@ -9,7 +9,7 @@ test "if statement" {
         .name = "i",
         .value = Value{ .VAL_NUMBER = 1 },
     };
-    try TestBase.globalVariableBasedTest("var i = 0; if (true) i = 1;", &[_]ExpectedVariable {expected});
+    try TestBase.globalVariableBasedTest("var i = 0; if (true) i = 1;", &[_]ExpectedVariable{expected});
 }
 
 test "if else" {
@@ -17,7 +17,7 @@ test "if else" {
         .name = "i",
         .value = Value{ .VAL_NUMBER = 2 },
     };
-    try TestBase.globalVariableBasedTest("var i = 0; if (false) i = 1; else i = 2;", &[_]ExpectedVariable {expected});
+    try TestBase.globalVariableBasedTest("var i = 0; if (false) i = 1; else i = 2;", &[_]ExpectedVariable{expected});
 }
 
 test "else if" {
@@ -25,5 +25,5 @@ test "else if" {
         .name = "i",
         .value = Value{ .VAL_NUMBER = 2 },
     };
-    try TestBase.globalVariableBasedTest("var i = 0; if (false) i = 1; else if (true) i = 2; else i = 3;", &[_]ExpectedVariable {expected});
+    try TestBase.globalVariableBasedTest("var i = 0; if (false) i = 1; else if (true) i = 2; else i = 3;", &[_]ExpectedVariable{expected});
 }
